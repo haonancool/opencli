@@ -68,7 +68,6 @@ opencli zhihu question --id 34816524     # 问题详情和回答
 opencli xiaohongshu search --keyword "美食"  # 搜索笔记
 opencli xiaohongshu notifications             # 通知（mentions/likes/connections）
 opencli xiaohongshu feed --limit 10           # 推荐 Feed
-opencli xiaohongshu me                         # 我的信息
 opencli xiaohongshu user --uid xxx             # 用户主页
 
 # 雪球 Xueqiu (browser)
@@ -88,6 +87,7 @@ opencli twitter bookmarks --limit 20     # 获取收藏的书签推文
 opencli twitter search --keyword "AI"    # 搜索推文
 opencli twitter profile elonmusk         # 用户资料
 opencli twitter timeline --limit 20      # 时间线
+opencli twitter thread 1234567890        # 推文 thread（原文 + 回复）
 opencli twitter article 1891511252174299446 # 推文长文内容
 opencli twitter follow elonmusk          # 关注用户
 opencli twitter unfollow elonmusk        # 取消关注
@@ -97,9 +97,20 @@ opencli twitter unbookmark https://x.com/... # 取消收藏
 # Reddit (browser)
 opencli reddit hot --limit 10            # 热门帖子
 opencli reddit hot --subreddit programming  # 指定子版块
-opencli reddit frontpage --limit 10      # 首页
-opencli reddit search --keyword "AI"     # 搜索
-opencli reddit subreddit --name rust     # 子版块浏览
+opencli reddit frontpage --limit 10      # 首页 /r/all
+opencli reddit popular --limit 10        # /r/popular 热门
+opencli reddit search --query "AI" --sort top --time week  # 搜索（支持排序+时间过滤）
+opencli reddit subreddit --name rust --sort top --time month  # 子版块浏览（支持时间过滤）
+opencli reddit read --post_id 1abc123    # 阅读帖子 + 评论
+opencli reddit user --username spez      # 用户资料（karma、注册时间）
+opencli reddit user-posts --username spez  # 用户发帖历史
+opencli reddit user-comments --username spez  # 用户评论历史
+opencli reddit upvote --post_id xxx --direction up  # 投票（up/down/none）
+opencli reddit save --post_id xxx        # 收藏帖子
+opencli reddit comment --post_id xxx --text "Great!"  # 发表评论
+opencli reddit subscribe --subreddit python  # 订阅子版块
+opencli reddit saved --limit 10          # 我的收藏
+opencli reddit upvoted --limit 10        # 我的赞
 
 # V2EX (public + browser)
 opencli v2ex hot --limit 10              # 热门话题

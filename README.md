@@ -134,10 +134,10 @@ npm install -g @jackwener/opencli@latest
 |------|----------|------|
 | **bilibili** | `hot` `search` `me` `favorite` `history` `feed` `subtitle` `dynamic` `ranking` `following` `user-videos` | 🔐 Browser |
 | **zhihu** | `hot` `search` `question` | 🔐 Browser |
-| **xiaohongshu** | `search` `notifications` `feed` `me` `user` | 🔐 Browser |
+| **xiaohongshu** | `search` `notifications` `feed` `user` | 🔐 Browser |
 | **xueqiu** | `feed` `hot-stock` `hot` `search` `stock` `watchlist` | 🔐 Browser |
-| **twitter** | `trending` `bookmarks` `profile` `search` `timeline` `following` `followers` `notifications` `post` `reply` `delete` `like` `article` `follow` `unfollow` `bookmark` `unbookmark` | 🔐 Browser |
-| **reddit** | `hot` `frontpage` `search` `subreddit` | 🔐 Browser |
+| **twitter** | `trending` `bookmarks` `profile` `search` `timeline` `thread` `following` `followers` `notifications` `post` `reply` `delete` `like` `article` `follow` `unfollow` `bookmark` `unbookmark` | 🔐 Browser |
+| **reddit** | `hot` `frontpage` `popular` `search` `subreddit` `read` `user` `user-posts` `user-comments` `upvote` `save` `comment` `subscribe` `saved` `upvoted` | 🔐 Browser |
 | **weibo** | `hot` | 🔐 Browser |
 | **boss** | `search` `detail` | 🔐 Browser |
 | **coupang** | `search` `add-to-cart` | 🔐 Browser |
