@@ -10,7 +10,7 @@ export const modelCommand = cli({
   args: [
     { name: 'name', help: 'Target model name (e.g. claude, gemini, o1)', required: true, positional: true }
   ],
-  columns: ['status'],
+  columns: ['Status'],
   func: async (page, kwargs) => {
     const targetName = kwargs.name.toLowerCase();
     
@@ -42,6 +42,6 @@ export const modelCommand = cli({
     `);
     
     await page.wait(0.5);
-    return [{ status: `Model switched to: ${kwargs.name}` }];
+    return [{ Status: `Model switched to: ${kwargs.name}` }];
   },
 });

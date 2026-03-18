@@ -10,7 +10,7 @@ export const sendCommand = cli({
   args: [
     { name: 'message', help: 'The message text to send', required: true, positional: true }
   ],
-  columns: ['status', 'message'],
+  columns: ['Status', 'Message'],
   func: async (page, kwargs) => {
     const text = kwargs.message;
 
@@ -35,6 +35,6 @@ export const sendCommand = cli({
     // Press Enter to submit the message
     await page.pressKey('Enter');
     
-    return [{ status: 'Sent successfully', message: text }];
+    return [{ Status: 'Sent successfully', Message: text }];
   },
 });

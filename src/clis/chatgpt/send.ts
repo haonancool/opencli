@@ -14,6 +14,13 @@ export const sendCommand = cli({
   func: async (page: IPage | null, kwargs: any) => {
     const text = kwargs.text as string;
     try {
+      // Backup current clipboard content
+      let clipBackup = '';
+      try {
+        clipBackup = execSync('pbpaste', { encoding: 'utf-8' });
+      } catch { /* clipboard may be empty */ }
+
+      // Copy text to clipboard
       spawnSync('pbcopy', { input: text });
       
       execSync("osascript -e 'tell application \"ChatGPT\" to activate'");
@@ -27,6 +34,11 @@ export const sendCommand = cli({
                   "-e 'end tell'";
                      
       execSync(cmd);
+
+      // Restore original clipboard content
+      if (clipBackup) {
+        spawnSync('pbcopy', { input: clipBackup });
+      }
 
       return [{ Status: 'Success' }];
     } catch (err: any) {

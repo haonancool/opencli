@@ -143,20 +143,20 @@ npm install -g @jackwener/opencli@latest
 
 ## Built-in Commands
 
-**26 sites · 119 commands** — run `opencli list` for the live registry.
+**26 sites · 128 commands** — run `opencli list` for the live registry.
 
 | Site | Commands | Count | Mode |
 |------|----------|:-----:|------|
 | **twitter** | `trending` `bookmarks` `profile` `search` `timeline` `thread` `following` `followers` `notifications` `post` `reply` `delete` `like` `article` `follow` `unfollow` `bookmark` `unbookmark` | 18 | 🔐 Browser |
 | **reddit** | `hot` `frontpage` `popular` `search` `subreddit` `read` `user` `user-posts` `user-comments` `upvote` `save` `comment` `subscribe` `saved` `upvoted` | 15 | 🔐 Browser |
 | **bilibili** | `hot` `search` `me` `favorite` `history` `feed` `subtitle` `dynamic` `ranking` `following` `user-videos` | 11 | 🔐 Browser |
-| **cursor** | `status` `send` `read` `new` `dump` `composer` `model` `extract-code` | 8 | 🖥️ Desktop |
-| **codex** | `status` `send` `read` `new` `extract-diff` `model` | 6 | 🖥️ Desktop |
+| **cursor** | `status` `send` `read` `new` `dump` `composer` `model` `extract-code` `ask` `screenshot` `history` `export` | 12 | 🖥️ Desktop |
+| **codex** | `status` `send` `read` `new` `extract-diff` `model` `ask` `screenshot` `history` `export` | 10 | 🖥️ Desktop |
 | **v2ex** | `hot` `latest` `topic` `daily` `me` `notifications` | 6 | 🌐 / 🔐 |
 | **xueqiu** | `feed` `hot-stock` `hot` `search` `stock` `watchlist` | 6 | 🔐 Browser |
 | **antigravity** | `status` `send` `read` `new` `evaluate` | 5 | 🖥️ Desktop |
 | **xiaohongshu** | `search` `notifications` `feed` `me` `user` | 5 | 🔐 Browser |
-| **chatgpt** | `status` `new` `send` `read` | 4 | 🖥️ Desktop |
+| **chatgpt** | `status` `new` `send` `read` `ask` | 5 | 🖥️ Desktop |
 | **xiaoyuzhou** | `podcast` `podcast-episodes` `episode` | 3 | 🌐 Public |
 | **youtube** | `search` `video` `transcript` | 3 | 🔐 Browser |
 | **zhihu** | `hot` `search` `question` | 3 | 🔐 Browser |

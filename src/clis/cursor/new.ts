@@ -8,23 +8,12 @@ export const newCommand = cli({
   domain: 'localhost',
   strategy: Strategy.UI,
   browser: true,
+  args: [],
   columns: ['Status'],
   func: async (page: IPage) => {
-    const success = await page.evaluate(`
-      (function() {
-        const newChatButton = document.querySelector('[aria-label="New Chat"], [aria-label="New Chat (⌘N)"], .agent-sidebar-new-agent-button');
-        if (newChatButton) {
-            newChatButton.click();
-            return true;
-        }
-        return false;
-      })()
-    `);
-
-    if (!success) {
-      throw new Error('Could not find New Chat button in Cursor DOM.');
-    }
-
+    // Use keyboard shortcut — most robust approach, avoids brittle DOM selectors
+    const isMac = process.platform === 'darwin';
+    await page.pressKey(isMac ? 'Meta+N' : 'Control+N');
     await page.wait(1);
 
     return [{ Status: 'Success' }];

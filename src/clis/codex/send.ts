@@ -1,4 +1,5 @@
 import { cli, Strategy } from '../../registry.js';
+import type { IPage } from '../../types.js';
 
 export const sendCommand = cli({
   site: 'codex',
@@ -9,19 +10,16 @@ export const sendCommand = cli({
   browser: true,
   args: [{ name: 'text', required: true, positional: true, help: 'Text, command (e.g. /review), or skill (e.g. $imagegen)' }],
   columns: ['Status', 'InjectedText'],
-  func: async (page, kwargs) => {
+  func: async (page: IPage, kwargs: any) => {
     const textToInsert = kwargs.text as string;
 
-    // We use evaluate to inject text bypassing complex nested shadow roots or contenteditables
     await page.evaluate(`
       (function(text) {
-        // Attempt 1: Look for standard textarea/composer input
         let composer = document.querySelector('textarea, [contenteditable="true"]');
         
-        // Basic heuristic: prioritize elements that are deeply nested, visible, and have 'composer' or 'input' classes
         const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
         if (editables.length > 0) {
-           composer = editables[editables.length - 1]; // Often the active input is appended near the end
+           composer = editables[editables.length - 1];
         }
 
         if (!composer) {
@@ -29,11 +27,12 @@ export const sendCommand = cli({
         }
 
         composer.focus();
-        
-        // This handles Lexical/ProseMirror/Monaco rich-text editors effectively by mimicking human paste/type deeply.
         document.execCommand('insertText', false, text);
       })(${JSON.stringify(textToInsert)})
     `);
+
+    // Wait for the UI to register the input
+    await page.wait(0.5);
 
     // Simulate Enter key to submit
     await page.pressKey('Enter');

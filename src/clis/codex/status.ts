@@ -1,14 +1,16 @@
 import { cli, Strategy } from '../../registry.js';
+import type { IPage } from '../../types.js';
 
 export const statusCommand = cli({
   site: 'codex',
   name: 'status',
   description: 'Check active CDP connection to OpenAI Codex App',
   domain: 'localhost',
-  strategy: Strategy.UI, // Interactive UI manipulation
+  strategy: Strategy.UI,
   browser: true,
+  args: [],
   columns: ['Status', 'Url', 'Title'],
-  func: async (page) => {
+  func: async (page: IPage) => {
     const url = await page.evaluate('window.location.href');
     const title = await page.evaluate('document.title');
 

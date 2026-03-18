@@ -144,16 +144,16 @@ npm install -g @jackwener/opencli@latest
 
 ## 内置命令
 
-**26 个站点 · 119 命令** — 运行 `opencli list` 查看完整注册表。
+**26 个站点 · 128 命令** — 运行 `opencli list` 查看完整注册表。
 
 | 站点 | 命令 | 数量 | 模式 |
 |------|------|:----:|------|
 | **twitter** | `trending` `bookmarks` `profile` `search` `timeline` `thread` `following` `followers` `notifications` `post` `reply` `delete` `like` `article` `follow` `unfollow` `bookmark` `unbookmark` | 18 | 🔐 浏览器 |
 | **reddit** | `hot` `frontpage` `popular` `search` `subreddit` `read` `user` `user-posts` `user-comments` `upvote` `save` `comment` `subscribe` `saved` `upvoted` | 15 | 🔐 浏览器 |
 | **antigravity** | `status` `send` `read` `new` `evaluate` | 5 | 🖥️ 桌面端 |
-| **chatgpt** | `status` `new` `send` `read` | 4 | 🖥️ 桌面端 |
-| **codex** | `status` `send` `read` `new` `extract-diff` `model` | 6 | 🖥️ 桌面端 |
-| **cursor** | `status` `send` `read` `new` `dump` `composer` `model` `extract-code` | 8 | 🖥️ 桌面端 |
+| **chatgpt** | `status` `new` `send` `read` `ask` | 5 | 🖥️ 桌面端 |
+| **codex** | `status` `send` `read` `new` `extract-diff` `model` `ask` `screenshot` `history` `export` | 10 | 🖥️ 桌面端 |
+| **cursor** | `status` `send` `read` `new` `dump` `composer` `model` `extract-code` `ask` `screenshot` `history` `export` | 12 | 🖥️ 桌面端 |
 | **bilibili** | `hot` `search` `me` `favorite` `history` `feed` `subtitle` `dynamic` `ranking` `following` `user-videos` | 11 | 🔐 浏览器 |
 | **v2ex** | `hot` `latest` `topic` `daily` `me` `notifications` | 6 | 🌐 / 🔐 |
 | **xueqiu** | `feed` `hot-stock` `hot` `search` `stock` `watchlist` | 6 | 🔐 浏览器 |

@@ -13,37 +13,18 @@ export const composerCommand = cli({
   func: async (page: IPage, kwargs: any) => {
     const textToInsert = kwargs.text as string;
 
-    const injected = await page.evaluate(
-      `(async function() {
-        let isComposerVisible = document.querySelector('.composer-bar') !== null || document.querySelector('#composer-toolbar-section') !== null;
-        return isComposerVisible;
-      })()`
-    );
-
-    if (!injected) {
-      await page.pressKey('Meta+I');
-      await page.wait(1.0);
-    } else {
-      // Just focus it if it's open but unfocused (we can't easily know if it's focused without triggering something)
-      await page.pressKey('Meta+I');
-      await page.wait(0.2);
-      const isStillVisible = await page.evaluate('document.querySelector(".composer-bar") !== null');
-      if (!isStillVisible) {
-        await page.pressKey('Meta+I'); // Re-open
-        await page.wait(0.5);
-      }
-    }
+    // Open/Focus Composer via shortcut — always works regardless of current state
+    await page.pressKey('Meta+I');
+    await page.wait(1);
 
     const typed = await page.evaluate(
       `(function(text) {
-        let composer = document.querySelector('.composer-bar [data-lexical-editor="true"], [id*="composer"] [contenteditable="true"], .aislash-editor-input');
-        
-        if (!composer) {
-            composer = document.activeElement;
-            if (!composer || !composer.isContentEditable) {
-                return false;
-            }
+        let composer = document.activeElement;
+        if (!composer || !composer.isContentEditable) {
+            composer = document.querySelector('.composer-bar [data-lexical-editor="true"], [id*="composer"] [contenteditable="true"], .aislash-editor-input');
         }
+        
+        if (!composer) return false;
 
         composer.focus();
         document.execCommand('insertText', false, text);
@@ -55,15 +36,13 @@ export const composerCommand = cli({
       throw new Error('Could not find Cursor Composer input element after pressing Cmd+I.');
     }
 
-    // Submit the command. In Cursor Composer, Enter usually submits if it's not a multi-line edit.
-    // Sometimes Cmd+Enter is needed? We'll just submit standard Enter.
     await page.wait(0.5);
     await page.pressKey('Enter');
     await page.wait(1);
 
     return [
       {
-        Status: 'Success (Composer)',
+        Status: 'Success',
         InjectedText: textToInsert,
       },
     ];
