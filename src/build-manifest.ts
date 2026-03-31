@@ -230,7 +230,7 @@ export async function buildManifest(): Promise<ManifestEntry[]> {
     }
   }
 
-  return [...manifest.values()];
+  return [...manifest.values()].sort((a, b) => a.site.localeCompare(b.site) || a.name.localeCompare(b.name));
 }
 
 async function main(): Promise<void> {

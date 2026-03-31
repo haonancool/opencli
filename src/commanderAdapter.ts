@@ -103,6 +103,9 @@ export function registerCommandToProgram(siteCmd: Command, cmd: CliCommand): voi
       }
 
       const result = await executeCommand(cmd, kwargs, verbose);
+      if (result === null || result === undefined) {
+        return;
+      }
 
       if (verbose && (!result || (Array.isArray(result) && result.length === 0))) {
         console.error(chalk.yellow('[Verbose] Warning: Command returned an empty result.'));
