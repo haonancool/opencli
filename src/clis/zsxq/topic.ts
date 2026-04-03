@@ -19,6 +19,7 @@ cli({
   domain: 'wx.zsxq.com',
   strategy: Strategy.COOKIE,
   browser: true,
+  deprecated: 'The old topic detail endpoint is no longer reliable; use zsxq topics output instead.',
   args: [
     { name: 'id', required: true, positional: true, help: 'Topic ID' },
     { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch' },

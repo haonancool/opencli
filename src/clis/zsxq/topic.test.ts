@@ -7,6 +7,11 @@ describe('zsxq topic command', () => {
     vi.restoreAllMocks();
   });
 
+  it('is marked deprecated because topic details now come from topics responses', () => {
+    const command = getRegistry().get('zsxq/topic');
+    expect(command?.deprecated).toBeTruthy();
+  });
+
   it('maps topic detail 404 responses to NOT_FOUND before fetching comments', async () => {
     const command = getRegistry().get('zsxq/topic');
     expect(command?.func).toBeTypeOf('function');

@@ -43,12 +43,16 @@ export interface ZsxqComment {
 
 export interface ZsxqTopic {
   topic_id?: number;
+  topic_uid?: string;
   create_time?: string;
   comments_count?: number;
   likes_count?: number;
+  tourist_likes_count?: number;
   readers_count?: number;
   reading_count?: number;
   rewards_count?: number;
+  digested?: boolean;
+  sticky?: boolean;
   title?: string;
   type?: string;
   group?: ZsxqGroup;
@@ -76,6 +80,8 @@ export interface ZsxqTopic {
   };
   show_comments?: ZsxqComment[];
   comments?: ZsxqComment[];
+  latest_likes?: Array<Record<string, unknown>>;
+  likes_detail?: Record<string, unknown>;
 }
 
 export interface BrowserFetchResult {
@@ -305,6 +311,18 @@ export function getTopicAuthor(topic: ZsxqTopic): string {
 
 export function getTopicText(topic: ZsxqTopic): string {
   const primary = [
+    topic.talk?.text,
+    topic.question?.text,
+    topic.answer?.text,
+    topic.task?.text,
+    topic.solution?.text,
+    topic.title,
+  ].find(value => typeof value === 'string' && value.trim());
+  return (primary || '').replace(/\s+/g, ' ').trim();
+}
+
+export function getTopicTitle(topic: ZsxqTopic): string {
+  const primary = [
     topic.title,
     topic.talk?.text,
     topic.question?.text,
@@ -334,18 +352,29 @@ export function summarizeComments(comments: ZsxqComment[], limit: number = 3): s
 export function toTopicRow(topic: ZsxqTopic): Record<string, unknown> {
   const topicId = topic.topic_id ?? '';
   const comments = pickArray<ZsxqComment>(topic.show_comments, topic.comments);
+  const fullText = getTopicText(topic);
   return {
     topic_id: topicId,
+    topic_uid: topic.topic_uid ?? '',
     type: topic.type || '',
     group: topic.group?.name || '',
     author: getTopicAuthor(topic),
-    title: getTopicText(topic).slice(0, 120),
-    content: getTopicText(topic),
+    title: getTopicTitle(topic).slice(0, 120),
+    content: fullText,
     comments: topic.comments_count ?? comments.length ?? 0,
     likes: topic.likes_count ?? 0,
     readers: topic.readers_count ?? topic.reading_count ?? 0,
     time: topic.create_time || '',
     comment_preview: summarizeComments(comments),
+    talk: topic.talk,
+    question: topic.question,
+    answer: topic.answer,
+    task: topic.task,
+    solution: topic.solution,
+    show_comments: topic.show_comments,
+    comments_raw: topic.comments,
+    digested: topic.digested ?? false,
+    sticky: topic.sticky ?? false,
     url: getTopicUrl(topicId),
   };
 }

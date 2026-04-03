@@ -10,7 +10,7 @@ Read groups, topics, search results, dynamics, and single-topic details from [çŸ
 |---------|-------------|
 | `opencli zsxq groups` | List the groups your account has joined |
 | `opencli zsxq topics` | List topics in the active group |
-| `opencli zsxq topic <id>` | Fetch a single topic with comments |
+| `opencli zsxq topic <id>` | Deprecated: old single-topic endpoint is no longer reliable |
 | `opencli zsxq search <keyword>` | Search topics inside a group |
 | `opencli zsxq dynamics` | List recent dynamics across groups |
 
@@ -22,6 +22,9 @@ opencli zsxq groups
 
 # List topics from the active group in Chrome
 opencli zsxq topics --limit 20
+
+# Topics now include inline comment previews from the topics API
+opencli zsxq topics --limit 20 -f json
 
 # Search inside the active group
 opencli zsxq search "opencli"
@@ -44,6 +47,8 @@ opencli zsxq dynamics --limit 20
 ## Notes
 
 - `zsxq topics` and `zsxq search` use the current active group context from Chrome by default
+- `zsxq topics` is now the preferred source for inline topic detail and comment previews
+- Structured output from `zsxq topics` preserves raw fields such as `talk` and `show_comments`
 - If there is no active group context, pass `--group_id <id>` or open the target group in Chrome first
 - `zsxq groups` returns `group_id`, which you can reuse with `--group_id`
-- `zsxq topic` surfaces a missing topic as `NOT_FOUND` instead of a generic fetch error
+- `zsxq topic` is deprecated because the old topic-detail endpoint is no longer reliable

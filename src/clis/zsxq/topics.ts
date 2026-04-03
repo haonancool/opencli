@@ -19,7 +19,7 @@ cli({
     { name: 'limit', type: 'int', default: 20, help: 'Number of topics to return' },
     { name: 'group_id', help: 'Optional group id; defaults to the active group in Chrome' },
   ],
-  columns: ['topic_id', 'type', 'author', 'title', 'comments', 'likes', 'time', 'url'],
+  columns: ['topic_id', 'type', 'author', 'title', 'comments', 'likes', 'comment_preview', 'time', 'url'],
   func: async (page, kwargs) => {
     await ensureZsxqPage(page);
     await ensureZsxqAuth(page);
