@@ -51,8 +51,8 @@ describe('zsxq utils', () => {
                 { file_id: 123, name: 'report.pdf' },
                 { file_id: '456', name: 'data.csv' },
             ],
-            file_preview: '123:report.pdf | 456:data.csv',
         });
+        expect(toTopicRow(topic)).not.toHaveProperty('file_preview');
     });
 
     it('unwraps and validates file download metadata', () => {
@@ -76,7 +76,7 @@ describe('zsxq utils', () => {
         })).toThrow('Unsupported download URL protocol');
     });
 
-    it('includes comment and reply authors with their full content', () => {
+    it('nests replies under their parent comments', () => {
         const topic = {
             topic_id: 'comments-1',
             comments_count: 2,
@@ -97,16 +97,44 @@ describe('zsxq utils', () => {
         };
 
         expect(getTopicCommentItems(topic)).toEqual([
-            { comment_id: 10, parent_comment_id: '', author: '包包', reply_to: '', content: '这是评论' },
-            { comment_id: 11, parent_comment_id: 10, author: '数据驱动投资者', reply_to: '包包', content: '这是回复 的完整内容' },
+            {
+                comment_id: 10,
+                author: '包包',
+                content: '这是评论',
+                replies: [{
+                        comment_id: 11,
+                        author: '数据驱动投资者',
+                        reply_to: '包包',
+                        content: '这是回复 的完整内容',
+                        replies: [],
+                    }],
+            },
         ]);
         expect(toTopicRow(topic)).toMatchObject({
-            comments_count: 2,
-            comments: '包包: 这是评论 | 数据驱动投资者 -> 包包: 这是回复 的完整内容',
+            comments: 2,
+            comment_preview: '包包: 这是评论 | 数据驱动投资者 -> 包包: 这是回复 的完整内容',
             comment_items: [
-                { author: '包包', reply_to: '', content: '这是评论' },
-                { author: '数据驱动投资者', reply_to: '包包', content: '这是回复 的完整内容' },
+                {
+                    author: '包包',
+                    content: '这是评论',
+                    replies: [{ author: '数据驱动投资者', reply_to: '包包', content: '这是回复 的完整内容' }],
+                },
             ],
         });
+    });
+
+    it('uses question and answer fields instead of content for q&a topics', () => {
+        const row = toTopicRow({
+            topic_id: 'qa-1',
+            type: 'q&a',
+            question: { owner: { name: '提问者' }, text: '问题\n内容' },
+            answer: { owner: { name: '回答者' }, text: '回答\n内容' },
+        });
+
+        expect(row).toMatchObject({
+            question: '问题 内容',
+            answer: '回答 内容',
+        });
+        expect(row).not.toHaveProperty('content');
     });
 });

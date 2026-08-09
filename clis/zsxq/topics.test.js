@@ -35,11 +35,13 @@ describe('zsxq topics command', () => {
                     resp_data: {
                         topics: [{
                                 topic_id: 101,
-                                type: 'talk',
-                                talk: {
-                                    text: 'Attachment topic',
+                                type: 'q&a',
+                                question: {
+                                    text: 'A question',
                                     files: [{ file_id: 202, name: 'report.pdf' }],
                                 },
+                                answer: { text: 'An answer' },
+                                talk: { files: [{ file_id: 202, name: 'report.pdf' }] },
                                 comments_count: 2,
                                 show_comments: [
                                     { comment_id: 1, owner: { name: 'Alice' }, text: 'First comment' },
@@ -67,14 +69,20 @@ describe('zsxq topics command', () => {
         expect(result[0]).toMatchObject({
             topic_id: 101,
             files: [{ file_id: 202, name: 'report.pdf' }],
-            file_preview: '202:report.pdf',
-            comments_count: 2,
-            comments: 'Alice: First comment | Bob -> Alice: A reply',
+            question: 'A question',
+            answer: 'An answer',
+            comments: 2,
+            comment_preview: 'Alice: First comment | Bob -> Alice: A reply',
             comment_items: [
-                { author: 'Alice', reply_to: '', content: 'First comment' },
-                { author: 'Bob', reply_to: 'Alice', content: 'A reply' },
+                {
+                    author: 'Alice',
+                    content: 'First comment',
+                    replies: [{ author: 'Bob', reply_to: 'Alice', content: 'A reply' }],
+                },
             ],
         });
+        expect(result[0]).not.toHaveProperty('content');
+        expect(result[0]).not.toHaveProperty('file_preview');
     });
 
     it('supports both time boundaries and keeps --limit as a compatibility alias', () => {

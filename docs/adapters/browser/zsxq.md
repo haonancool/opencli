@@ -55,8 +55,9 @@ opencli zsxq dynamics --limit 20
 
 - `zsxq topics` and `zsxq search` use the current active group context from Chrome by default
 - `zsxq topics --scope` accepts `all`, `digests`, `by_owner`, `questions`, `with_files`, and `with_images`
-- Topic JSON/YAML output includes a structured `files` list with each attachment's `file_id` and `name`; table output shows the same data in `file_preview`
-- Topic output includes `comments_count`, a readable `comments` field with every comment/reply author and content, and structured `comment_items` in JSON/YAML
+- Topic JSON/YAML output includes a structured `files` list with each attachment's `file_id` and `name`
+- Q&A topics expose separate `question` and `answer` fields instead of a `content` field
+- Topic output keeps `comments` as the comment count, uses `comment_preview` for readable text, and nests replies under each `comment_items[].replies` array
 - `zsxq download` saves to the current directory by default and URL-decodes the download URL's `attname` as the filename
 - `--limit` remains available as a deprecated compatibility alias for `zsxq topics --count`
 - If there is no active group context, pass `--group_id <id>` or open the target group in Chrome first

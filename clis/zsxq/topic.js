@@ -14,7 +14,7 @@ cli({
         { name: 'group_id', help: 'Group ID (optional; defaults to active group in Chrome)' },
         { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch' },
     ],
-    columns: ['topic_id', 'type', 'author', 'title', 'comments_count', 'comments', 'likes', 'url'],
+    columns: ['topic_id', 'type', 'author', 'title', 'question', 'answer', 'comments', 'comment_preview', 'likes', 'url'],
     func: async (page, kwargs) => {
         await ensureZsxqPage(page);
         await ensureZsxqAuth(page);

@@ -27,7 +27,7 @@ cli({
         { name: 'scope', default: 'all', choices: TOPIC_SCOPES, help: 'Topic filter scope' },
         { name: 'group_id', help: 'Optional group id; defaults to the active group in Chrome' },
     ],
-    columns: ['topic_id', 'type', 'author', 'title', 'file_preview', 'comments_count', 'comments', 'likes', 'time', 'url'],
+    columns: ['topic_id', 'type', 'author', 'title', 'question', 'answer', 'comments', 'comment_preview', 'likes', 'time', 'url'],
     func: async (page, kwargs) => {
         await ensureZsxqPage(page);
         await ensureZsxqAuth(page);

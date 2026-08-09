@@ -48031,7 +48031,7 @@
       "group",
       "author",
       "title",
-      "comments_count",
+      "comments",
       "likes",
       "time",
       "url"
@@ -48076,8 +48076,10 @@
       "type",
       "author",
       "title",
-      "comments_count",
+      "question",
+      "answer",
       "comments",
+      "comment_preview",
       "likes",
       "url"
     ],
@@ -48147,9 +48149,10 @@
       "type",
       "author",
       "title",
-      "file_preview",
-      "comments_count",
+      "question",
+      "answer",
       "comments",
+      "comment_preview",
       "likes",
       "time",
       "url"

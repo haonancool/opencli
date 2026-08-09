@@ -199,6 +199,9 @@ export function getTopicContent(topic) {
     ].find(value => typeof value === 'string' && value.trim());
     return (primary || '').replace(/\s+/g, ' ').trim();
 }
+function normalizeTopicText(value) {
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
 export function getTopicFiles(topic) {
     const files = pickArray(topic.talk?.files);
     return files
@@ -257,40 +260,60 @@ export function summarizeComments(comments, limit = 3) {
         .join(' | ');
 }
 export function getTopicCommentItems(topic) {
-    const comments = pickArray(topic.show_comments, topic.comments);
-    return comments.map((comment) => ({
-        comment_id: comment.comment_id ?? '',
-        parent_comment_id: comment.parent_comment_id ?? '',
-        author: comment.owner?.name || '匿名',
-        reply_to: comment.repliee?.name || '',
-        content: (comment.text || '').replace(/\s+/g, ' ').trim(),
-    }));
-}
-export function formatTopicComments(commentItems) {
-    return commentItems
-        .map((comment) => `${comment.author}${comment.reply_to ? ` -> ${comment.reply_to}` : ''}: ${comment.content}`)
-        .join(' | ');
+    const comments = pickArray(topic.comments, topic.show_comments);
+    const entries = comments.map((comment) => {
+        const item = {
+            comment_id: comment.comment_id ?? '',
+            author: comment.owner?.name || '匿名',
+            content: normalizeTopicText(comment.text),
+            replies: [],
+        };
+        if (comment.repliee?.name)
+            item.reply_to = comment.repliee.name;
+        return {
+            item,
+            parentCommentId: comment.parent_comment_id ?? '',
+        };
+    });
+    const byId = new Map(entries
+        .filter(entry => entry.item.comment_id !== '')
+        .map(entry => [String(entry.item.comment_id), entry.item]));
+    const roots = [];
+    for (const entry of entries) {
+        const parent = entry.parentCommentId !== ''
+            ? byId.get(String(entry.parentCommentId))
+            : null;
+        if (parent && parent !== entry.item)
+            parent.replies.push(entry.item);
+        else
+            roots.push(entry.item);
+    }
+    return roots;
 }
 export function toTopicRow(topic) {
     const topicId = topic.topic_id ?? '';
-    const comments = pickArray(topic.show_comments, topic.comments);
+    const comments = pickArray(topic.comments, topic.show_comments);
     const commentItems = getTopicCommentItems(topic);
     const files = getTopicFiles(topic);
+    const isQuestionAnswer = topic.type === 'q&a';
     return {
         topic_id: topicId,
         type: topic.type || '',
         group: topic.group?.name || '',
         author: getTopicAuthor(topic),
         title: getTopicText(topic),
-        content: getTopicContent(topic),
-        comments_count: topic.comments_count ?? comments.length ?? 0,
-        comments: formatTopicComments(commentItems),
+        ...(isQuestionAnswer
+            ? {
+                question: normalizeTopicText(topic.question?.text),
+                answer: normalizeTopicText(topic.answer?.text),
+            }
+            : { content: getTopicContent(topic) }),
+        comments: topic.comments_count ?? comments.length ?? 0,
         comment_items: commentItems,
         likes: topic.likes_count ?? 0,
         readers: topic.readers_count ?? topic.reading_count ?? 0,
         time: topic.create_time || '',
         files,
-        file_preview: files.map(file => `${file.file_id}:${file.name}`).join(' | '),
         comment_preview: summarizeComments(comments),
         url: getTopicUrl(topicId),
     };
