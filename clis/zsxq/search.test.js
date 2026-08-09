@@ -11,7 +11,7 @@ describe('zsxq search command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } })
                 .mockResolvedValueOnce(null),
         };
         await expect(command.func(mockPage, { keyword: 'opencli', limit: 20 })).rejects.toMatchObject({

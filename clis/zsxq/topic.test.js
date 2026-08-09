@@ -11,7 +11,7 @@ describe('zsxq topic command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true) // ensureZsxqAuth
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } }) // ensureZsxqAuth
                 .mockResolvedValueOnce('12345') // getActiveGroupId
                 .mockResolvedValueOnce({
                 ok: true,

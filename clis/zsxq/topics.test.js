@@ -11,7 +11,7 @@ describe('zsxq topics command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } })
                 .mockResolvedValueOnce(null),
         };
         await expect(command.func(mockPage, { limit: 20 })).rejects.toMatchObject({
@@ -27,7 +27,7 @@ describe('zsxq topics command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } })
                 .mockResolvedValueOnce({
                 ok: true,
                 data: {

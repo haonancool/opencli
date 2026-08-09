@@ -1,6 +1,11 @@
 import { ArgumentError, AuthRequiredError, CliError } from '@jackwener/opencli/errors';
 const SITE_DOMAIN = 'wx.zsxq.com';
 const SITE_URL = 'https://wx.zsxq.com';
+// Keep these aligned with the official wx.zsxq.com web client. ZSXQ validates
+// the signed request headers and returns API code 1059 when they are missing or
+// invalid. The current official bundle uses 2.95.0 for /v2/ and 3.20.0 for /v3/.
+const ZSXQ_V2_X_VERSION = '2.95.0';
+const ZSXQ_V3_X_VERSION = '3.20.0';
 function asRecord(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
         ? value
@@ -21,28 +26,9 @@ export async function ensureZsxqAuth(page) {
     // zsxq uses httpOnly cookies that may be on different subdomains.
     // Verify auth by attempting a lightweight API call instead of checking cookies.
     try {
-        const result = await page.evaluate(`
-      (async () => {
-        try {
-          const r = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', 'https://api.zsxq.com/v2/groups', true);
-            xhr.withCredentials = true;
-            xhr.setRequestHeader('accept', 'application/json');
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try { resolve(JSON.parse(xhr.responseText)); }
-                catch { resolve(null); }
-              } else { resolve(null); }
-            };
-            xhr.onerror = () => resolve(null);
-            xhr.send();
-          });
-          return r !== null;
-        } catch { return false; }
-      })()
-    `);
-        if (!result) {
+        const result = await browserJsonRequest(page, 'https://api.zsxq.com/v2/groups');
+        const authenticated = result?.ok && result.data !== null;
+        if (!authenticated) {
             throw new AuthRequiredError('zsxq.com');
         }
     }
@@ -77,13 +63,48 @@ export async function browserJsonRequest(page, path) {
     return await page.evaluate(`
     (async () => {
       const path = ${JSON.stringify(path)};
+      const v2Version = ${JSON.stringify(ZSXQ_V2_X_VERSION)};
+      const v3Version = ${JSON.stringify(ZSXQ_V3_X_VERSION)};
 
       try {
+        const requestId = (() => {
+          let value = '';
+          for (let index = 0; index < 32; index++) {
+            value += Math.floor(Math.random() * 16).toString(16);
+            if (index === 8 || index === 12 || index === 16 || index === 20) value += '-';
+          }
+          return value;
+        })();
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        let aduid = localStorage.getItem('XAduid');
+        if (!aduid) {
+          aduid = requestId;
+          localStorage.setItem('XAduid', aduid);
+        }
+        const parts = path.split('?');
+        const canonicalPath = parts.length > 1
+          ? parts[0] + '?' + parts.slice(1).join('?').replace(/'/g, '%27')
+          : path;
+        const signatureInput = canonicalPath + ' ' + timestamp + ' ' + requestId;
+        const signatureBytes = await crypto.subtle.digest(
+          'SHA-1',
+          new TextEncoder().encode(signatureInput),
+        );
+        const signature = Array.from(new Uint8Array(signatureBytes))
+          .map(byte => byte.toString(16).padStart(2, '0'))
+          .join('');
+        const version = path.includes('/v3/') ? v3Version : v2Version;
+
         return await new Promise((resolve) => {
           const xhr = new XMLHttpRequest();
           xhr.open('GET', path, true);
           xhr.withCredentials = true;
           xhr.setRequestHeader('accept', 'application/json, text/plain, */*');
+          xhr.setRequestHeader('X-Request-Id', requestId);
+          xhr.setRequestHeader('X-Version', version);
+          xhr.setRequestHeader('X-Signature', signature);
+          xhr.setRequestHeader('X-Timestamp', timestamp);
+          xhr.setRequestHeader('X-Aduid', aduid);
           xhr.onload = () => {
             let parsed = null;
             if (xhr.responseText) {
@@ -187,7 +208,7 @@ export function getTopicAuthor(topic) {
 }
 export function getTopicText(topic) {
     const title = (topic.title || '').replace(/\s+/g, ' ').trim();
-    return title || getTopicContent(topic);
+    return title || getTopicContent(topic).replace(/\s+/g, ' ').trim();
 }
 export function getTopicContent(topic) {
     const primary = [
@@ -197,10 +218,10 @@ export function getTopicContent(topic) {
         topic.task?.text,
         topic.solution?.text,
     ].find(value => typeof value === 'string' && value.trim());
-    return (primary || '').replace(/\s+/g, ' ').trim();
+    return primary || '';
 }
 function normalizeTopicText(value) {
-    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+    return typeof value === 'string' ? value : '';
 }
 export function getTopicFiles(topic) {
     const files = pickArray(topic.talk?.files);

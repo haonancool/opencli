@@ -22,7 +22,7 @@ describe('zsxq download command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } })
                 .mockResolvedValueOnce({
                 ok: true,
                 data: {
@@ -61,7 +61,7 @@ describe('zsxq download command', () => {
         const command = getRegistry().get('zsxq/download');
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
-            evaluate: vi.fn().mockResolvedValueOnce(true),
+            evaluate: vi.fn().mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } }),
         };
 
         await expect(command.func(mockPage, { file_id: '../secret' })).rejects.toMatchObject({
@@ -76,7 +76,7 @@ describe('zsxq download command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } })
                 .mockResolvedValueOnce({
                 ok: true,
                 data: { succeeded: true, resp_data: { download_url: 'https://download.zsxq.com/a.pdf' } },
@@ -95,7 +95,7 @@ describe('zsxq download command', () => {
         const mockPage = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn()
-                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({ ok: true, status: 200, data: { succeeded: true } })
                 .mockResolvedValueOnce({
                 ok: true,
                 data: {
