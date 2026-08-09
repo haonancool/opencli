@@ -199,6 +199,49 @@ export function getTopicContent(topic) {
     ].find(value => typeof value === 'string' && value.trim());
     return (primary || '').replace(/\s+/g, ' ').trim();
 }
+export function getTopicFiles(topic) {
+    const files = pickArray(topic.talk?.files);
+    return files
+        .map((entry) => {
+        const file = asRecord(entry?.file) || asRecord(entry);
+        if (!file)
+            return null;
+        const fileId = file.file_id;
+        if (typeof fileId !== 'string' && typeof fileId !== 'number')
+            return null;
+        return {
+            file_id: fileId,
+            name: typeof file.name === 'string' ? file.name : '',
+        };
+    })
+        .filter(Boolean);
+}
+export function getFileDownloadInfo(payload) {
+    const data = unwrapRespData(payload);
+    const record = asRecord(data);
+    if (!record)
+        throw new CliError('PARSE_ERROR', 'Invalid ZSXQ file download response');
+    const file = asRecord(record.file);
+    const downloadUrl = record.download_url ?? file?.download_url;
+    if (typeof downloadUrl !== 'string' || !downloadUrl.trim()) {
+        throw new CliError('PARSE_ERROR', 'Download URL not found in ZSXQ file response');
+    }
+    let parsed;
+    try {
+        parsed = new URL(downloadUrl);
+    }
+    catch {
+        throw new CliError('PARSE_ERROR', 'Invalid download URL in ZSXQ file response');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        throw new CliError('PARSE_ERROR', 'Unsupported download URL protocol in ZSXQ file response');
+    }
+    const name = record.name ?? file?.name;
+    return {
+        download_url: parsed.toString(),
+        name: typeof name === 'string' ? name : '',
+    };
+}
 export function getTopicUrl(topicId) {
     return topicId ? `${SITE_URL}/topic/${topicId}` : SITE_URL;
 }
@@ -216,6 +259,7 @@ export function summarizeComments(comments, limit = 3) {
 export function toTopicRow(topic) {
     const topicId = topic.topic_id ?? '';
     const comments = pickArray(topic.show_comments, topic.comments);
+    const files = getTopicFiles(topic);
     return {
         topic_id: topicId,
         type: topic.type || '',
@@ -227,6 +271,8 @@ export function toTopicRow(topic) {
         likes: topic.likes_count ?? 0,
         readers: topic.readers_count ?? topic.reading_count ?? 0,
         time: topic.create_time || '',
+        files,
+        file_preview: files.map(file => `${file.file_id}:${file.name}`).join(' | '),
         comment_preview: summarizeComments(comments),
         url: getTopicUrl(topicId),
     };

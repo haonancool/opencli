@@ -47863,6 +47863,48 @@
   },
   {
     "site": "zsxq",
+    "name": "download",
+    "description": "通过 file_id 下载知识星球文件",
+    "access": "read",
+    "domain": "wx.zsxq.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "file_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "File ID from the files field returned by zsxq topics"
+      },
+      {
+        "name": "output",
+        "type": "str",
+        "default": "./zsxq-downloads",
+        "required": false,
+        "help": "Output directory"
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "required": false,
+        "help": "Optional output filename (use the name returned by zsxq topics)"
+      }
+    ],
+    "columns": [
+      "file_id",
+      "name",
+      "status",
+      "size",
+      "path"
+    ],
+    "type": "js",
+    "modulePath": "zsxq/download.js",
+    "sourceFile": "zsxq/download.js",
+    "navigateBefore": "https://wx.zsxq.com"
+  },
+  {
+    "site": "zsxq",
     "name": "dynamics",
     "description": "获取所有星球的最新动态",
     "access": "read",
@@ -48054,11 +48096,44 @@
     "browser": true,
     "args": [
       {
-        "name": "limit",
+        "name": "count",
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "Number of topics to return"
+        "help": "Number of topics to request and return"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "help": "Deprecated alias for --count"
+      },
+      {
+        "name": "begin_time",
+        "type": "str",
+        "required": false,
+        "help": "Optional inclusive start time, e.g. 2026-08-06T12:40:04.266+0800"
+      },
+      {
+        "name": "end_time",
+        "type": "str",
+        "required": false,
+        "help": "Optional inclusive end time, e.g. 2026-08-06T21:40:04.266+0800"
+      },
+      {
+        "name": "scope",
+        "type": "str",
+        "default": "all",
+        "required": false,
+        "help": "Topic filter scope",
+        "choices": [
+          "all",
+          "digests",
+          "by_owner",
+          "questions",
+          "with_files",
+          "with_images"
+        ]
       },
       {
         "name": "group_id",
@@ -48072,6 +48147,7 @@
       "type",
       "author",
       "title",
+      "file_preview",
       "comments",
       "likes",
       "time",
