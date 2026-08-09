@@ -47880,15 +47880,15 @@
       {
         "name": "output",
         "type": "str",
-        "default": "./zsxq-downloads",
+        "default": ".",
         "required": false,
-        "help": "Output directory"
+        "help": "Output directory (defaults to the current directory)"
       },
       {
         "name": "name",
         "type": "str",
         "required": false,
-        "help": "Optional output filename (use the name returned by zsxq topics)"
+        "help": "Optional output filename (defaults to the decoded attname in the download URL)"
       }
     ],
     "columns": [
@@ -48031,7 +48031,7 @@
       "group",
       "author",
       "title",
-      "comments",
+      "comments_count",
       "likes",
       "time",
       "url"
@@ -48076,9 +48076,9 @@
       "type",
       "author",
       "title",
+      "comments_count",
       "comments",
       "likes",
-      "comment_preview",
       "url"
     ],
     "type": "js",
@@ -48148,6 +48148,7 @@
       "author",
       "title",
       "file_preview",
+      "comments_count",
       "comments",
       "likes",
       "time",

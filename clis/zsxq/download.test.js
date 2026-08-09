@@ -28,7 +28,7 @@ describe('zsxq download command', () => {
                 data: {
                     succeeded: true,
                     resp_data: {
-                        download_url: 'https://download.zsxq.com/path/server-name?token=abc',
+                        download_url: 'https://download.zsxq.com/path/server-name?attname=API%20report.pdf&token=abc',
                     },
                 },
             }),
@@ -44,16 +44,16 @@ describe('zsxq download command', () => {
         expect(mockPage.goto).toHaveBeenCalledWith('https://wx.zsxq.com');
         expect(mockPage.evaluate.mock.calls[1][0]).toContain('/v2/files/181288214421242/download_url');
         expect(mockHttpDownload).toHaveBeenCalledWith(
-            'https://download.zsxq.com/path/server-name?token=abc',
-            '/tmp/zsxq/Quarterly_report.pdf',
+            'https://download.zsxq.com/path/server-name?attname=API%20report.pdf&token=abc',
+            '/tmp/zsxq/Quarterly report.pdf',
             { timeout: 60000 },
         );
         expect(result).toEqual([{
                 file_id: '181288214421242',
-                name: 'Quarterly_report.pdf',
+                name: 'Quarterly report.pdf',
                 status: 'success',
                 size: '2.0 KB',
-                path: '/tmp/zsxq/Quarterly_report.pdf',
+                path: '/tmp/zsxq/Quarterly report.pdf',
             }]);
     });
 
@@ -90,9 +90,42 @@ describe('zsxq download command', () => {
         });
     });
 
-    it('derives a safe filename from response metadata or the signed URL', () => {
-        expect(__test__.filenameFromDownload('123', '', 'folder/report 2026.pdf', 'https://example.com/x')).toBe('report_2026.pdf');
-        expect(__test__.filenameFromDownload('123', '', '', 'https://example.com/files/data%20set.csv?token=x')).toBe('data_set.csv');
+    it('defaults to the current directory and decodes attname as the filename', async () => {
+        const command = getRegistry().get('zsxq/download');
+        const mockPage = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce({
+                ok: true,
+                data: {
+                    succeeded: true,
+                    resp_data: {
+                        download_url: 'https://files.zsxq.com/blob?attname=%E5%91%A8%E5%A4%8D%E7%9B%9820260809.pdf&token=abc',
+                    },
+                },
+            }),
+        };
+        mockHttpDownload.mockResolvedValue({ success: true, size: 1024 });
+
+        const result = await command.func(mockPage, { file_id: '181288214421242' });
+
+        expect(command.args.find(arg => arg.name === 'output')?.default).toBe('.');
+        expect(mockHttpDownload).toHaveBeenCalledWith(
+            'https://files.zsxq.com/blob?attname=%E5%91%A8%E5%A4%8D%E7%9B%9820260809.pdf&token=abc',
+            '周复盘20260809.pdf',
+            { timeout: 60000 },
+        );
+        expect(result[0]).toMatchObject({
+            name: '周复盘20260809.pdf',
+            path: '周复盘20260809.pdf',
+        });
+    });
+
+    it('derives a safe filename from explicit metadata or the signed URL path as fallbacks', () => {
+        expect(__test__.filenameFromDownload('123', '', 'folder/report 2026.pdf', 'https://example.com/x')).toBe('report 2026.pdf');
+        expect(__test__.filenameFromDownload('123', '', '', 'https://example.com/files/data%20set.csv?token=x')).toBe('data set.csv');
+        expect(__test__.filenameFromDownload('123', '../manual name.pdf', '', 'https://example.com/x?attname=api.pdf')).toBe('manual name.pdf');
         expect(__test__.filenameFromDownload('123', '', '', 'https://example.com/download?token=x')).toBe('123.bin');
     });
 });

@@ -40,6 +40,11 @@ describe('zsxq topics command', () => {
                                     text: 'Attachment topic',
                                     files: [{ file_id: 202, name: 'report.pdf' }],
                                 },
+                                comments_count: 2,
+                                show_comments: [
+                                    { comment_id: 1, owner: { name: 'Alice' }, text: 'First comment' },
+                                    { comment_id: 2, parent_comment_id: 1, owner: { name: 'Bob' }, repliee: { name: 'Alice' }, text: 'A reply' },
+                                ],
                             }],
                     },
                 },
@@ -63,6 +68,12 @@ describe('zsxq topics command', () => {
             topic_id: 101,
             files: [{ file_id: 202, name: 'report.pdf' }],
             file_preview: '202:report.pdf',
+            comments_count: 2,
+            comments: 'Alice: First comment | Bob -> Alice: A reply',
+            comment_items: [
+                { author: 'Alice', reply_to: '', content: 'First comment' },
+                { author: 'Bob', reply_to: 'Alice', content: 'A reply' },
+            ],
         });
     });
 

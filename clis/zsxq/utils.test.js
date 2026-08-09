@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getFileDownloadInfo, getTopicFiles, getTopicText, toTopicRow } from './utils.js';
+import { getFileDownloadInfo, getTopicCommentItems, getTopicFiles, getTopicText, toTopicRow } from './utils.js';
 
 describe('zsxq utils', () => {
     it('keeps title and content separate when both fields exist', () => {
@@ -74,5 +74,39 @@ describe('zsxq utils', () => {
             succeeded: true,
             resp_data: { download_url: 'file:///tmp/report.pdf' },
         })).toThrow('Unsupported download URL protocol');
+    });
+
+    it('includes comment and reply authors with their full content', () => {
+        const topic = {
+            topic_id: 'comments-1',
+            comments_count: 2,
+            show_comments: [
+                {
+                    comment_id: 10,
+                    owner: { name: '包包' },
+                    text: '这是评论',
+                },
+                {
+                    comment_id: 11,
+                    parent_comment_id: 10,
+                    owner: { name: '数据驱动投资者' },
+                    repliee: { name: '包包' },
+                    text: '这是回复\n的完整内容',
+                },
+            ],
+        };
+
+        expect(getTopicCommentItems(topic)).toEqual([
+            { comment_id: 10, parent_comment_id: '', author: '包包', reply_to: '', content: '这是评论' },
+            { comment_id: 11, parent_comment_id: 10, author: '数据驱动投资者', reply_to: '包包', content: '这是回复 的完整内容' },
+        ]);
+        expect(toTopicRow(topic)).toMatchObject({
+            comments_count: 2,
+            comments: '包包: 这是评论 | 数据驱动投资者 -> 包包: 这是回复 的完整内容',
+            comment_items: [
+                { author: '包包', reply_to: '', content: '这是评论' },
+                { author: '数据驱动投资者', reply_to: '包包', content: '这是回复 的完整内容' },
+            ],
+        });
     });
 });

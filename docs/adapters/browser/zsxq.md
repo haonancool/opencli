@@ -27,7 +27,10 @@ opencli zsxq topics --count 20
 # Filter topics by scope and time range (either time boundary may be omitted)
 opencli zsxq topics --scope with_files --begin_time "2026-08-06T12:40:04.266+0800" --end_time "2026-08-06T21:40:04.266+0800"
 
-# Download an attachment using the file_id and name returned by topics
+# Download an attachment into the current directory; its name comes from the URL's attname
+opencli zsxq download 181288214421242
+
+# Optionally choose another directory or override the filename
 opencli zsxq download 181288214421242 --name "report.pdf" --output ./zsxq-downloads
 
 # Search inside the active group
@@ -53,6 +56,8 @@ opencli zsxq dynamics --limit 20
 - `zsxq topics` and `zsxq search` use the current active group context from Chrome by default
 - `zsxq topics --scope` accepts `all`, `digests`, `by_owner`, `questions`, `with_files`, and `with_images`
 - Topic JSON/YAML output includes a structured `files` list with each attachment's `file_id` and `name`; table output shows the same data in `file_preview`
+- Topic output includes `comments_count`, a readable `comments` field with every comment/reply author and content, and structured `comment_items` in JSON/YAML
+- `zsxq download` saves to the current directory by default and URL-decodes the download URL's `attname` as the filename
 - `--limit` remains available as a deprecated compatibility alias for `zsxq topics --count`
 - If there is no active group context, pass `--group_id <id>` or open the target group in Chrome first
 - `zsxq groups` returns `group_id`, which you can reuse with `--group_id`

@@ -1,18 +1,33 @@
 import * as path from 'node:path';
 import { cli, Strategy } from '@jackwener/opencli/registry';
-import { httpDownload, sanitizeFilename } from '@jackwener/opencli/download';
+import { httpDownload } from '@jackwener/opencli/download';
 import { formatBytes } from '@jackwener/opencli/download/progress';
 import { ArgumentError, CommandExecutionError } from '@jackwener/opencli/errors';
 import { ensureZsxqAuth, ensureZsxqPage, fetchFirstJson, getFileDownloadInfo } from './utils.js';
 
+function safeFilename(value) {
+    const basename = String(value || '').replace(/\\/g, '/').split('/').pop()?.trim() || '';
+    if (!basename || basename === '.' || basename === '..')
+        return '';
+    return basename
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+        .slice(0, 200);
+}
 function filenameFromDownload(fileId, requestedName, responseName, downloadUrl) {
-    const explicitName = String(requestedName || responseName || '').trim();
-    if (explicitName)
-        return sanitizeFilename(path.basename(explicitName)) || `${fileId}.bin`;
     try {
-        const basename = decodeURIComponent(path.basename(new URL(downloadUrl).pathname));
+        const url = new URL(downloadUrl);
+        const attname = safeFilename(url.searchParams.get('attname'));
+        const explicitName = safeFilename(requestedName);
+        if (explicitName)
+            return explicitName;
+        if (attname)
+            return attname;
+        const apiName = safeFilename(responseName);
+        if (apiName)
+            return apiName;
+        const basename = safeFilename(decodeURIComponent(path.basename(url.pathname)));
         if (basename && basename.includes('.'))
-            return sanitizeFilename(basename) || `${fileId}.bin`;
+            return basename;
     }
     catch {
         // getFileDownloadInfo already validates the URL; fall back defensively.
@@ -30,8 +45,8 @@ export const downloadCommand = cli({
     browser: true,
     args: [
         { name: 'file_id', positional: true, required: true, help: 'File ID from the files field returned by zsxq topics' },
-        { name: 'output', default: './zsxq-downloads', help: 'Output directory' },
-        { name: 'name', help: 'Optional output filename (use the name returned by zsxq topics)' },
+        { name: 'output', default: '.', help: 'Output directory (defaults to the current directory)' },
+        { name: 'name', help: 'Optional output filename (defaults to the decoded attname in the download URL)' },
     ],
     columns: ['file_id', 'name', 'status', 'size', 'path'],
     func: async (page, kwargs) => {
@@ -45,7 +60,7 @@ export const downloadCommand = cli({
         ]);
         const info = getFileDownloadInfo(data);
         const filename = filenameFromDownload(fileId, kwargs.name, info.name, info.download_url);
-        const output = String(kwargs.output || './zsxq-downloads');
+        const output = String(kwargs.output || '.');
         const destPath = path.join(output, filename);
         const result = await httpDownload(info.download_url, destPath, { timeout: 60000 });
         if (!result.success) {

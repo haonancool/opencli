@@ -256,9 +256,25 @@ export function summarizeComments(comments, limit = 3) {
     })
         .join(' | ');
 }
+export function getTopicCommentItems(topic) {
+    const comments = pickArray(topic.show_comments, topic.comments);
+    return comments.map((comment) => ({
+        comment_id: comment.comment_id ?? '',
+        parent_comment_id: comment.parent_comment_id ?? '',
+        author: comment.owner?.name || '匿名',
+        reply_to: comment.repliee?.name || '',
+        content: (comment.text || '').replace(/\s+/g, ' ').trim(),
+    }));
+}
+export function formatTopicComments(commentItems) {
+    return commentItems
+        .map((comment) => `${comment.author}${comment.reply_to ? ` -> ${comment.reply_to}` : ''}: ${comment.content}`)
+        .join(' | ');
+}
 export function toTopicRow(topic) {
     const topicId = topic.topic_id ?? '';
     const comments = pickArray(topic.show_comments, topic.comments);
+    const commentItems = getTopicCommentItems(topic);
     const files = getTopicFiles(topic);
     return {
         topic_id: topicId,
@@ -267,7 +283,9 @@ export function toTopicRow(topic) {
         author: getTopicAuthor(topic),
         title: getTopicText(topic),
         content: getTopicContent(topic),
-        comments: topic.comments_count ?? comments.length ?? 0,
+        comments_count: topic.comments_count ?? comments.length ?? 0,
+        comments: formatTopicComments(commentItems),
+        comment_items: commentItems,
         likes: topic.likes_count ?? 0,
         readers: topic.readers_count ?? topic.reading_count ?? 0,
         time: topic.create_time || '',
