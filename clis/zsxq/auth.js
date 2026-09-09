@@ -1,5 +1,6 @@
 import { AuthRequiredError, CommandExecutionError } from '@jackwener/opencli/errors';
 import { registerSiteAuthCommands } from '../_shared/site-auth.js';
+import { browserJsonRequest } from './utils.js';
 
 // zsxq auth cookies are all httpOnly and span multiple subdomains
 // (wx.zsxq.com / api.zsxq.com / .zsxq.com), so document.cookie / cookie
@@ -7,32 +8,26 @@ import { registerSiteAuthCommands } from '../_shared/site-auth.js';
 async function verifyZsxqIdentity(page) {
   await page.goto('https://wx.zsxq.com/');
   await page.wait(2);
-  const probe = await page.evaluate(`
-    (async () => {
-      const url = location.href;
-      if (/\\/login(\\b|$)/.test(url)) {
-        return { kind: 'auth', detail: 'zsxq wx page redirected to /login — anonymous session' };
-      }
-      try {
-        const r = await fetch('https://api.zsxq.com/v2/users/self', {
-          credentials: 'include',
-          headers: { Accept: 'application/json' },
-        });
-        if (r.status === 401 || r.status === 403) {
-          return { kind: 'auth', detail: 'zsxq /v2/users/self returned HTTP ' + r.status };
-        }
-        if (!r.ok) return { kind: 'http', httpStatus: r.status };
-        const d = await r.json();
-        if (d?.succeeded === false || !d?.resp_data?.user) {
-          return { kind: 'auth', detail: 'zsxq /v2/users/self returned succeeded=false — anonymous' };
-        }
-        const u = d.resp_data.user;
-        return { ok: true, user_id: String(u.user_id || u.id || ''), name: String(u.name || u.nickname || '') };
-      } catch (e) {
-        return { kind: 'exception', detail: String(e && e.message || e) };
-      }
-    })()
-  `);
+  const currentUrl = await page.evaluate('location.href');
+  if (/\/login(\b|$)/.test(currentUrl)) {
+    throw new AuthRequiredError('zsxq.com', 'zsxq wx page redirected to /login — anonymous session');
+  }
+  let probe;
+  try {
+    const result = await browserJsonRequest(page, 'https://api.zsxq.com/v2/users/self');
+    if (result.status === 401 || result.status === 403) {
+      probe = { kind: 'auth', detail: 'zsxq /v2/users/self returned HTTP ' + result.status };
+    } else if (!result.ok) {
+      probe = { kind: 'http', httpStatus: result.status };
+    } else if (result.data?.succeeded === false || !result.data?.resp_data?.user) {
+      probe = { kind: 'auth', detail: 'zsxq /v2/users/self returned succeeded=false — anonymous' };
+    } else {
+      const user = result.data.resp_data.user;
+      probe = { ok: true, user_id: String(user.user_id || user.id || ''), name: String(user.name || user.nickname || '') };
+    }
+  } catch (error) {
+    probe = { kind: 'exception', detail: String(error?.message || error) };
+  }
   if (probe?.kind === 'auth') throw new AuthRequiredError('zsxq.com', probe.detail);
   if (probe?.kind === 'http') throw new CommandExecutionError(`HTTP ${probe.httpStatus} from zsxq /v2/users/self`);
   if (probe?.kind === 'exception') throw new CommandExecutionError(`zsxq whoami failed: ${probe.detail}`);
@@ -52,14 +47,8 @@ registerSiteAuthCommands({
   // No-navigation poll: probe the API from the current page so the login-page
   // QR code isn't reset by a goto on every interval.
   poll: async (page) => {
-    const loggedIn = await page.evaluate(`(async () => {
-      try {
-        const r = await fetch('https://api.zsxq.com/v2/users/self', { credentials: 'include', headers: { Accept: 'application/json' } });
-        if (!r.ok) return false;
-        const d = await r.json();
-        return !!(d?.resp_data?.user);
-      } catch { return false; }
-    })()`);
+    const result = await browserJsonRequest(page, 'https://api.zsxq.com/v2/users/self');
+    const loggedIn = result.ok && !!result.data?.resp_data?.user;
     if (!loggedIn) {
       throw new AuthRequiredError('zsxq.com', 'Waiting for zsxq login');
     }
