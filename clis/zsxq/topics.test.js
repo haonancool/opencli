@@ -106,4 +106,18 @@ describe('zsxq topics command', () => {
         ]);
         expect(command.args.find(arg => arg.name === 'limit')?.help).toContain('Deprecated');
     });
+
+    it('rejects counts above the ZSXQ topics page size', async () => {
+        const command = getRegistry().get('zsxq/topics');
+        const mockPage = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn(),
+        };
+        await expect(command.func(mockPage, { count: 50, group_id: '51112282585554' })).rejects.toMatchObject({
+            code: 'ARGUMENT',
+            message: '--count must be between 1 and 30',
+        });
+        expect(mockPage.goto).not.toHaveBeenCalled();
+        expect(mockPage.evaluate).not.toHaveBeenCalled();
+    });
 });

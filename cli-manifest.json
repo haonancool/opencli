@@ -49737,7 +49737,7 @@
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "Number of topics to request and return"
+        "help": "Number of topics to request and return (max 30)"
       },
       {
         "name": "limit",
