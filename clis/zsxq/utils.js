@@ -3,9 +3,10 @@ const SITE_DOMAIN = 'wx.zsxq.com';
 const SITE_URL = 'https://wx.zsxq.com';
 // Keep these aligned with the official wx.zsxq.com web client. ZSXQ validates
 // the signed request headers and returns API code 1059 when they are missing or
-// invalid. The current official bundle uses 2.95.0 for /v2/ and 3.20.0 for /v3/.
-const ZSXQ_V2_X_VERSION = '2.95.0';
-const ZSXQ_V3_X_VERSION = '3.20.0';
+// invalid. Signature = sha1(`<absolute url> <unixSeconds> <requestId>`) — verified
+// against the official bundle (chunk-DVTWFCE4.js) on 2026-09-09.
+const ZSXQ_V2_X_VERSION = '2.96.0';
+const ZSXQ_V3_X_VERSION = '3.22.0';
 function asRecord(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
         ? value
@@ -31,6 +32,7 @@ export async function ensureZsxqAuth(page) {
         if (!authenticated) {
             throw new AuthRequiredError('zsxq.com');
         }
+        return true;
     }
     catch (err) {
         if (err instanceof AuthRequiredError)

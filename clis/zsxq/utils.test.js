@@ -49,7 +49,7 @@ describe('zsxq utils', () => {
         await browserJsonRequest(page, 'https://api.zsxq.com/v2/groups/123/topics?scope=all&count=1');
 
         const script = page.evaluate.mock.calls[0][0];
-        expect(script).toContain("const v2Version = \"2.95.0\"");
+        expect(script).toContain("const v2Version = \"2.96.0\"");
         expect(script).toContain("crypto.subtle.digest(");
         expect(script).toContain("xhr.setRequestHeader('X-Request-Id', requestId)");
         expect(script).toContain("xhr.setRequestHeader('X-Version', version)");

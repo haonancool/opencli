@@ -64,4 +64,6 @@ opencli zsxq dynamics --limit 20
 - `--limit` remains available as a deprecated compatibility alias for `zsxq topics --count`
 - If there is no active group context, pass `--group_id <id>` or open the target group in Chrome first
 - `zsxq groups` returns `group_id`, which you can reuse with `--group_id`
+- `zsxq topic` looks up topics via `/v2/topics/{id}/info` and does **not** need a group context; the `--group_id` flag is deprecated and ignored. Note the endpoint resolves by `topic_uid` — ids copied from share URLs (`wx.zsxq.com/topic/<id>`) work directly
 - `zsxq topic` surfaces a missing topic as `NOT_FOUND` instead of a generic fetch error
+- All zsxq API calls carry the web app's fingerprint headers (`X-Request-Id/X-Version/X-Signature/X-Timestamp/X-Aduid`) to pass the anti-tool risk control that answers non-official requests with API code `1059` 不支持非官方工具访问; the signature is `sha1("<url> <unixSeconds> <requestId>")` and the `X-Version` constants track the web app release

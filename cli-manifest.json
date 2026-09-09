@@ -49693,7 +49693,7 @@
         "name": "group_id",
         "type": "str",
         "required": false,
-        "help": "Group ID (optional; defaults to active group in Chrome)"
+        "help": "Deprecated: topic lookup uses /v2/topics/{id}/info and no longer needs a group id (ignored)"
       },
       {
         "name": "comment_limit",
