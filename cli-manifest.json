@@ -49661,6 +49661,7 @@
     ],
     "columns": [
       "topic_id",
+      "topic_uid",
       "group",
       "author",
       "title",
@@ -49688,7 +49689,7 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "Topic ID"
+        "help": "Topic ID or topic_uid (share URL / topics output both work)"
       },
       {
         "name": "group_id",
@@ -49706,6 +49707,7 @@
     ],
     "columns": [
       "topic_id",
+      "topic_uid",
       "type",
       "author",
       "title",
@@ -49781,6 +49783,7 @@
     ],
     "columns": [
       "topic_id",
+      "topic_uid",
       "type",
       "author",
       "title",

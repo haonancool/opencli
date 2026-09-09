@@ -271,6 +271,22 @@ export function getFileDownloadInfo(payload) {
 export function getTopicUrl(topicId) {
     return topicId ? `${SITE_URL}/topic/${topicId}` : SITE_URL;
 }
+export function getTopicLookupIds(id) {
+    const raw = String(id ?? '').trim();
+    if (!raw)
+        return [];
+    const ids = [raw];
+    if (/^\d+$/.test(raw)) {
+        try {
+            const n = BigInt(raw);
+            ids.push(String(n + 1n), String(n - 1n));
+        }
+        catch {
+            // keep the original id only
+        }
+    }
+    return [...new Set(ids)];
+}
 export function summarizeComments(comments, limit = 3) {
     return comments
         .slice(0, limit)
@@ -319,8 +335,10 @@ export function toTopicRow(topic) {
     const commentItems = getTopicCommentItems(topic);
     const files = getTopicFiles(topic);
     const isQuestionAnswer = topic.type === 'q&a';
+    const topicUid = topic.topic_uid ?? '';
     return {
         topic_id: topicId,
+        topic_uid: topicUid,
         type: topic.type || '',
         group: topic.group?.name || '',
         author: getTopicAuthor(topic),
@@ -341,6 +359,6 @@ export function toTopicRow(topic) {
         time: topic.create_time || '',
         files,
         comment_preview: summarizeComments(comments),
-        url: getTopicUrl(topicId),
+        url: getTopicUrl(topicUid || topicId),
     };
 }

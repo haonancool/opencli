@@ -29,7 +29,7 @@ cli({
         { name: 'scope', default: 'all', choices: TOPIC_SCOPES, help: 'Topic filter scope' },
         { name: 'group_id', help: 'Optional group id; defaults to the active group in Chrome' },
     ],
-    columns: ['topic_id', 'type', 'author', 'title', 'question', 'answer', 'question_author', 'answer_author', 'comments', 'comment_preview', 'likes', 'time', 'url'],
+    columns: ['topic_id', 'topic_uid', 'type', 'author', 'title', 'question', 'answer', 'question_author', 'answer_author', 'comments', 'comment_preview', 'likes', 'time', 'url'],
     func: async (page, kwargs) => {
         const count = Math.max(1, Number(kwargs.limit ?? kwargs.count) || 20);
         if (count > MAX_TOPIC_COUNT) {

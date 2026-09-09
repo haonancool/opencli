@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { browserJsonRequest, getFileDownloadInfo, getTopicCommentItems, getTopicFiles, getTopicText, toTopicRow } from './utils.js';
+import { browserJsonRequest, getFileDownloadInfo, getTopicCommentItems, getTopicFiles, getTopicLookupIds, getTopicText, toTopicRow } from './utils.js';
 
 describe('zsxq utils', () => {
     it('keeps title and content separate when both fields exist', () => {
@@ -168,5 +168,14 @@ describe('zsxq utils', () => {
             author: '提问者',
         });
         expect(row).not.toHaveProperty('content');
+    });
+
+    it('retries numeric topic ids around the listed topic_id for /info lookups', () => {
+        expect(getTopicLookupIds('22258841418521420')).toEqual([
+            '22258841418521420',
+            '22258841418521421',
+            '22258841418521419',
+        ]);
+        expect(getTopicLookupIds('abc')).toEqual(['abc']);
     });
 });
