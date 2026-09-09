@@ -44,7 +44,7 @@ describe('zsxq topic command', () => {
                 };
             }),
         };
-        const rows = await command.func(mockPage, { id: '1', comment_limit: 20 });
+        const rows = await command.func(mockPage, { topic_uid: '1', comment_limit: 20 });
         expect(rows).toHaveLength(1);
         expect(rows[0]).toMatchObject({
             topic_id: 1,
@@ -71,7 +71,7 @@ describe('zsxq topic command', () => {
                 data: { succeeded: false, code: 1007, info: '', error: '主题不存在或已被删除' },
             }),
         };
-        await expect(command.func(mockPage, { id: '404', comment_limit: 20 })).rejects.toMatchObject({
+        await expect(command.func(mockPage, { topic_uid: '404', comment_limit: 20 })).rejects.toMatchObject({
             code: 'NOT_FOUND',
             message: 'Topic 404 not found',
         });
@@ -89,7 +89,7 @@ describe('zsxq topic command', () => {
                 data: { succeeded: false, code: 1059, info: '不支持非官方工具访问', resp_data: {} },
             }),
         };
-        await expect(command.func(mockPage, { id: '1', comment_limit: 20 })).rejects.toMatchObject({
+        await expect(command.func(mockPage, { topic_uid: '1', comment_limit: 20 })).rejects.toMatchObject({
             code: '1059',
             message: '不支持非官方工具访问',
         });
@@ -107,7 +107,7 @@ describe('zsxq topic command', () => {
                 data: null,
             }),
         };
-        await expect(command.func(mockPage, { id: '404', comment_limit: 20 })).rejects.toMatchObject({
+        await expect(command.func(mockPage, { topic_uid: '404', comment_limit: 20 })).rejects.toMatchObject({
             code: 'NOT_FOUND',
             message: 'Topic 404 not found',
         });
@@ -150,7 +150,7 @@ describe('zsxq topic command', () => {
                 return { ok: false, status: 500, error: 'unexpected' };
             }),
         };
-        const rows = await command.func(mockPage, { id: '10', comment_limit: 5 });
+        const rows = await command.func(mockPage, { topic_uid: '10', comment_limit: 5 });
         expect(rows[0]).toMatchObject({ topic_id: 10, topic_uid: '11', author: 'alice' });
         expect(evaluateUrls.join('\n')).toContain('/v2/topics/10/info');
         expect(evaluateUrls.join('\n')).toContain('/v2/topics/11/info');

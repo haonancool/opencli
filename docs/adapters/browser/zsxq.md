@@ -10,7 +10,7 @@ Read groups, topics, search results, dynamics, single-topic details, and attache
 |---------|-------------|
 | `opencli zsxq groups` | List the groups your account has joined |
 | `opencli zsxq topics` | List topics in the active group |
-| `opencli zsxq topic <id>` | Fetch a single topic with comments |
+| `opencli zsxq topic <topic_uid>` | Fetch a single topic with comments |
 | `opencli zsxq download <file_id>` | Download an attached file by file ID |
 | `opencli zsxq search <keyword>` | Search topics inside a group |
 | `opencli zsxq dynamics` | List recent dynamics across groups |

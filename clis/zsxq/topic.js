@@ -10,7 +10,7 @@ cli({
     strategy: Strategy.COOKIE,
     browser: true,
     args: [
-        { name: 'id', required: true, positional: true, help: 'Prefer topic_uid from `zsxq topics` (share URL /topic/<uid>). topic_id still works via adjacent-id fallback' },
+        { name: 'topic_uid', required: true, positional: true, help: 'topic_uid from `zsxq topics` or share URL /topic/<uid>; listed topic_id still works via adjacent-id fallback' },
         { name: 'group_id', help: 'Deprecated: topic lookup uses /v2/topics/{id}/info and no longer needs a group id (ignored)' },
         { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch' },
     ],
@@ -18,7 +18,7 @@ cli({
     func: async (page, kwargs) => {
         await ensureZsxqPage(page);
         await ensureZsxqAuth(page);
-        const topicId = String(kwargs.id);
+        const topicId = String(kwargs.topic_uid ?? kwargs.id);
         const commentLimit = Math.max(1, Number(kwargs.comment_limit) || 20);
         // /info resolves by topic_uid. topics list historically printed topic_id
         // (often uid-1), so retry the adjacent numeric ids on API 1007/15403.

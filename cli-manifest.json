@@ -49685,11 +49685,11 @@
     "browser": true,
     "args": [
       {
-        "name": "id",
+        "name": "topic_uid",
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "Prefer topic_uid from `zsxq topics` (share URL /topic/<uid>). topic_id still works via adjacent-id fallback"
+        "help": "topic_uid from `zsxq topics` or share URL /topic/<uid>; listed topic_id still works via adjacent-id fallback"
       },
       {
         "name": "group_id",
