@@ -49689,7 +49689,7 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "Topic ID or topic_uid (share URL / topics output both work)"
+        "help": "Prefer topic_uid from `zsxq topics` (share URL /topic/<uid>). topic_id still works via adjacent-id fallback"
       },
       {
         "name": "group_id",

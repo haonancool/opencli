@@ -10,7 +10,7 @@ cli({
     strategy: Strategy.COOKIE,
     browser: true,
     args: [
-        { name: 'id', required: true, positional: true, help: 'Topic ID or topic_uid (share URL / topics output both work)' },
+        { name: 'id', required: true, positional: true, help: 'Prefer topic_uid from `zsxq topics` (share URL /topic/<uid>). topic_id still works via adjacent-id fallback' },
         { name: 'group_id', help: 'Deprecated: topic lookup uses /v2/topics/{id}/info and no longer needs a group id (ignored)' },
         { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch' },
     ],

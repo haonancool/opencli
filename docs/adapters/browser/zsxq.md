@@ -39,7 +39,7 @@ opencli zsxq search "opencli"
 # Search inside a specific group explicitly
 opencli zsxq search "opencli" --group_id 123456789
 
-# Export a single topic with comments
+# Export a single topic with comments (prefer topic_uid from `zsxq topics`)
 opencli zsxq topic 987654321 --comment_limit 20
 
 # Read recent dynamics across all joined groups
