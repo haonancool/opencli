@@ -163,6 +163,9 @@ describe('zsxq utils', () => {
         expect(row).toMatchObject({
             question: '问题\n内容',
             answer: '回答\n内容',
+            question_author: '提问者',
+            answer_author: '回答者',
+            author: '提问者',
         });
         expect(row).not.toHaveProperty('content');
     });

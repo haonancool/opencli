@@ -14,7 +14,7 @@ cli({
         { name: 'group_id', help: 'Deprecated: topic lookup uses /v2/topics/{id}/info and no longer needs a group id (ignored)' },
         { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch' },
     ],
-    columns: ['topic_id', 'type', 'author', 'title', 'question', 'answer', 'comments', 'comment_preview', 'likes', 'url'],
+    columns: ['topic_id', 'type', 'author', 'title', 'question', 'answer', 'question_author', 'answer_author', 'comments', 'comment_preview', 'likes', 'url'],
     func: async (page, kwargs) => {
         await ensureZsxqPage(page);
         await ensureZsxqAuth(page);

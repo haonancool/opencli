@@ -11,7 +11,7 @@ cli({
     args: [
         { name: 'limit', type: 'int', default: 20, help: 'Number of dynamics to return' },
     ],
-    columns: ['time', 'group', 'author', 'title', 'comments', 'likes', 'url'],
+    columns: ['time', 'group', 'author', 'answer_author', 'title', 'comments', 'likes', 'url'],
     func: async (page, kwargs) => {
         await ensureZsxqPage(page);
         await ensureZsxqAuth(page);
@@ -28,6 +28,7 @@ cli({
                     time: d.create_time || '',
                     group: '',
                     author: '',
+                    answer_author: '',
                     title: `[${d.action || 'unknown'}]`,
                     comments: 0,
                     likes: 0,
@@ -38,6 +39,7 @@ cli({
                 time: d.create_time || topic.create_time || '',
                 group: topic.group?.name || '',
                 author: getTopicAuthor(topic),
+                answer_author: topic.answer?.owner?.name || '',
                 title: getTopicText(topic),
                 comments: topic.comments_count ?? 0,
                 likes: topic.likes_count ?? 0,

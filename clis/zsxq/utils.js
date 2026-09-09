@@ -329,6 +329,9 @@ export function toTopicRow(topic) {
             ? {
                 question: normalizeTopicText(topic.question?.text),
                 answer: normalizeTopicText(topic.answer?.text),
+                // for q&a the chain in getTopicAuthor stops at the asker, so surface both explicitly
+                question_author: topic.question?.owner?.name || '',
+                answer_author: topic.answer?.owner?.name || '',
             }
             : { content: getTopicContent(topic) }),
         comments: topic.comments_count ?? comments.length ?? 0,
