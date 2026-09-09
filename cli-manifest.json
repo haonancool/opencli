@@ -49702,7 +49702,7 @@
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "Number of comments to fetch"
+        "help": "Number of comments to fetch (max 30)"
       }
     ],
     "columns": [

@@ -63,6 +63,7 @@ opencli zsxq dynamics --limit 20
 - API requests include the official web client's signed `X-Request-Id`, `X-Version`, `X-Signature`, `X-Timestamp`, and `X-Aduid` headers; API code `1059` means the signature check failed
 - `--limit` remains available as a deprecated compatibility alias for `zsxq topics --count`
 - `zsxq topics --count` is capped at 30 (the ZSXQ list API returns code `14001` above that); page with `--begin_time` / `--end_time` for more results
+- `zsxq topic --comment_limit` is capped at 30 (the comments API returns code `17801` above that)
 - If there is no active group context, pass `--group_id <id>` or open the target group in Chrome first
 - `zsxq groups` returns `group_id`, which you can reuse with `--group_id`
 - `zsxq topic` looks up topics via `/v2/topics/{id}/info` and does **not** need a group context; the `--group_id` flag is deprecated and ignored. The endpoint resolves by `topic_uid`. `zsxq topics` now prints `topic_uid`; if you pass the listed `topic_id` instead, the command retries the adjacent uid automatically

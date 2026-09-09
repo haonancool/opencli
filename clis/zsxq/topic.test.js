@@ -113,6 +113,18 @@ describe('zsxq topic command', () => {
         });
         expect(mockPage.goto).toHaveBeenCalledWith('https://wx.zsxq.com');
     });
+    it('rejects comment limits above the ZSXQ comments page size', async () => {
+        const command = getRegistry().get('zsxq/topic');
+        const mockPage = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn(),
+        };
+        await expect(command.func(mockPage, { topic_uid: '10', comment_limit: 100 })).rejects.toMatchObject({
+            code: 'ARGUMENT',
+            message: '--comment_limit must be between 1 and 30',
+        });
+        expect(mockPage.goto).not.toHaveBeenCalled();
+    });
     it('retries the adjacent topic_uid when /info returns 1007 for the listed topic_id', async () => {
         const command = getRegistry().get('zsxq/topic');
         const evaluateUrls = [];

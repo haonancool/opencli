@@ -1,5 +1,5 @@
 import { cli, Strategy } from '@jackwener/opencli/registry';
-import { CliError } from '@jackwener/opencli/errors';
+import { ArgumentError, CliError } from '@jackwener/opencli/errors';
 import { browserJsonRequest, ensureZsxqAuth, ensureZsxqPage, fetchFirstJson, getCommentsFromResponse, getTopicFromResponse, getTopicLookupIds, getTopicUrl, summarizeComments, toTopicRow, } from './utils.js';
 cli({
     site: 'zsxq',
@@ -12,14 +12,17 @@ cli({
     args: [
         { name: 'topic_uid', required: true, positional: true, help: 'topic_uid from `zsxq topics` or share URL /topic/<uid>; listed topic_id still works via adjacent-id fallback' },
         { name: 'group_id', help: 'Deprecated: topic lookup uses /v2/topics/{id}/info and no longer needs a group id (ignored)' },
-        { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch' },
+        { name: 'comment_limit', type: 'int', default: 20, help: 'Number of comments to fetch (max 30)' },
     ],
     columns: ['topic_id', 'topic_uid', 'type', 'author', 'title', 'question', 'answer', 'question_author', 'answer_author', 'comments', 'comment_preview', 'likes', 'url'],
     func: async (page, kwargs) => {
-        await ensureZsxqPage(page);
-        await ensureZsxqAuth(page);
         const topicId = String(kwargs.topic_uid ?? kwargs.id);
         const commentLimit = Math.max(1, Number(kwargs.comment_limit) || 20);
+        if (commentLimit > 30) {
+            throw new ArgumentError('--comment_limit must be between 1 and 30', 'The ZSXQ comments API rejects larger pages with code 17801');
+        }
+        await ensureZsxqPage(page);
+        await ensureZsxqAuth(page);
         // /info resolves by topic_uid. topics list historically printed topic_id
         // (often uid-1), so retry the adjacent numeric ids on API 1007/15403.
         let detailResp = null;
