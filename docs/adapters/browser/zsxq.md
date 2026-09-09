@@ -59,6 +59,7 @@ opencli zsxq dynamics --limit 20
 - Q&A topics expose separate `question` and `answer` fields instead of a `content` field
 - `question`, `answer`, and `content` preserve the API's original newlines and other whitespace characters
 - Topic output keeps `comments` as the comment count, uses `comment_preview` for readable text, and nests replies under each `comment_items[].replies` array
+- `zsxq topics` embeds only the API's comment preview (about 8 per topic); run `zsxq topic <topic_uid>` for the complete comment tree
 - `zsxq download` saves to the current directory by default and URL-decodes the download URL's `attname` as the filename
 - API requests include the official web client's signed `X-Request-Id`, `X-Version`, `X-Signature`, `X-Timestamp`, and `X-Aduid` headers; API code `1059` means the signature check failed
 - `--limit` remains available as a deprecated compatibility alias for `zsxq topics --count`
