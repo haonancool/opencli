@@ -178,4 +178,36 @@ describe('zsxq utils', () => {
         ]);
         expect(getTopicLookupIds('abc')).toEqual(['abc']);
     });
+
+    it('expands replied_comments from the comments endpoint into nested replies', () => {
+        const rows = toTopicRow({
+            topic_id: 'c-1',
+            type: 'talk',
+            talk: { text: 'body' },
+            comments: [
+                {
+                    comment_id: 1,
+                    owner: { name: 'Alice' },
+                    text: 'root',
+                    replied_comments: [
+                        { comment_id: 11, parent_comment_id: 1, owner: { name: 'Bob' }, text: 'reply 1' },
+                        { comment_id: 12, parent_comment_id: 1, owner: { name: 'Carol' }, text: 'reply 2' },
+                    ],
+                },
+                { comment_id: 2, owner: { name: 'Dave' }, text: 'another root' },
+            ],
+        });
+        expect(rows.comment_items).toEqual([
+            {
+                comment_id: 1,
+                author: 'Alice',
+                content: 'root',
+                replies: [
+                    { comment_id: 11, author: 'Bob', content: 'reply 1', replies: [] },
+                    { comment_id: 12, author: 'Carol', content: 'reply 2', replies: [] },
+                ],
+            },
+            { comment_id: 2, author: 'Dave', content: 'another root', replies: [] },
+        ]);
+    });
 });

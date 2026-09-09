@@ -299,7 +299,13 @@ export function summarizeComments(comments, limit = 3) {
         .join(' | ');
 }
 export function getTopicCommentItems(topic) {
-    const comments = pickArray(topic.comments, topic.show_comments);
+    // the list endpoint returns a flat array (replies carry parent_comment_id),
+    // while /v2/topics/{uid}/comments nests replies inside replied_comments
+    const rawComments = pickArray(topic.comments, topic.show_comments);
+    const comments = rawComments.flatMap((comment) => [
+        comment,
+        ...pickArray(comment.replied_comments),
+    ]);
     const entries = comments.map((comment) => {
         const item = {
             comment_id: comment.comment_id ?? '',
