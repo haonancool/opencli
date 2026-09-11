@@ -46977,6 +46977,47 @@
   },
   {
     "site": "xueqiu",
+    "name": "post",
+    "description": "获取单条雪球帖子正文和评论",
+    "access": "read",
+    "domain": "xueqiu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "status",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "帖子 status_id 或 URL(https://xueqiu.com/<user_id>/<status_id>)"
+      },
+      {
+        "name": "comment_limit",
+        "type": "int",
+        "default": 800,
+        "required": false,
+        "help": "Comments to return (max 800, 0 = post only)"
+      }
+    ],
+    "columns": [
+      "type",
+      "id",
+      "author",
+      "text",
+      "reply_to",
+      "likes",
+      "replies",
+      "retweets",
+      "created_at",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "xueqiu/post.js",
+    "sourceFile": "xueqiu/post.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "xueqiu",
     "name": "search",
     "description": "搜索雪球股票（代码或名称）",
     "access": "read",
@@ -47040,6 +47081,60 @@
     "modulePath": "xueqiu/stock.js",
     "sourceFile": "xueqiu/stock.js",
     "navigateBefore": "https://xueqiu.com"
+  },
+  {
+    "site": "xueqiu",
+    "name": "user",
+    "description": "获取指定博主(用户)的帖子时间线",
+    "access": "read",
+    "domain": "xueqiu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "user",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "博主 user_id、昵称、或个人主页 URL(https://xueqiu.com/u/<user_id>)"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Number of posts to return (max 100)"
+      },
+      {
+        "name": "page",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "1-based timeline page to start from (20 posts per page)"
+      },
+      {
+        "name": "comment_limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Comments to embed per post as comment_preview (max 20, 0 = off)"
+      }
+    ],
+    "columns": [
+      "id",
+      "author",
+      "text",
+      "comment_preview",
+      "likes",
+      "replies",
+      "retweets",
+      "created_at",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "xueqiu/user.js",
+    "sourceFile": "xueqiu/user.js",
+    "navigateBefore": false
   },
   {
     "site": "xueqiu",
