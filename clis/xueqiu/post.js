@@ -224,7 +224,7 @@ cli({
             throw new ArgumentError(`xueqiu post supports --comment_limit up to ${COMMENT_LIMIT_MAX}`);
         }
         await page.goto('https://xueqiu.com');
-        const detailResponse = await fetchXueqiuEnvelope(page, `https://xueqiu.com/statuses/show.json?id=${encodeURIComponent(statusId)}`);
+        const detailResponse = await fetchXueqiuEnvelope(page, `/statuses/show.json?id=${encodeURIComponent(statusId)}`);
         const classified = classifyStatusDetailResponse(detailResponse);
         if (classified.kind === 'auth' || classified.kind === 'anti-bot') {
             throw new AuthRequiredError('xueqiu.com', 'Post detail requires login or challenge clearance');
@@ -247,7 +247,7 @@ cli({
             limit: commentLimit,
             pageSize: COMMENT_PAGE_SIZE,
             maxPages: COMMENT_MAX_PAGES,
-            fetchPage: (maxId, pageSize) => fetchXueqiuEnvelope(page, `https://xueqiu.com/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&type=4&size=${pageSize}&max_id=${maxId}`),
+            fetchPage: (maxId, pageSize) => fetchXueqiuEnvelope(page, `/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&type=4&size=${pageSize}&max_id=${maxId}`),
             warn: log.warn,
         });
         return [postRow, ...comments];

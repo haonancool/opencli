@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { formatChinaDate, stripHtml } from './utils.js';
+import { describe, expect, it, vi } from 'vitest';
+import { fetchXueqiuEnvelope, formatChinaDate, stripHtml } from './utils.js';
 
 describe('formatChinaDate', () => {
     it('returns the Asia/Shanghai date for a UTC ms at China midnight', () => {
@@ -22,6 +22,17 @@ describe('formatChinaDate', () => {
     it('returns null for nullish input', () => {
         expect(formatChinaDate(null)).toBeNull();
         expect(formatChinaDate(undefined)).toBeNull();
+    });
+});
+
+describe('fetchXueqiuEnvelope', () => {
+    it('resolves the request URL against the page origin so fetches stay same-origin', async () => {
+        const evaluate = vi.fn().mockResolvedValue({ status: 200, contentType: 'application/json', json: { statuses: [] }, textSnippet: '' });
+        await fetchXueqiuEnvelope({ evaluate }, '/v4/statuses/user_timeline.json?user_id=1');
+        const script = evaluate.mock.calls[0][0];
+        expect(script).toContain('new URL(');
+        expect(script).toContain('location.origin');
+        expect(script).toContain('/v4/statuses/user_timeline.json?user_id=1');
     });
 });
 

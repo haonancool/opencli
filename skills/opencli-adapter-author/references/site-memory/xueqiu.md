@@ -38,6 +38,7 @@
 ## 坑 / 陷阱
 
 1. **必须先访问首页**：冷启动直接调 API 会 400 `cookie is invalid`，先 `page.goto('https://xueqiu.com/')` 再 fetch
+2. **页面内 fetch 一律用相对路径**：首页有时会 302 到 `www.xueqiu.com`，跨 origin（www 页面 → 裸域接口）+ 自定义头（`x-requested-with`）会触发 CORS 预检，openresty 对 OPTIONS 直接 400，GET 根本发不出去（表现为 `TypeError: Failed to fetch` / 适配器报 Unexpected response）；`fetchXueqiuEnvelope` 已按 `location.origin` 解析相对路径保持同源，别改回绝对 URL
 2. **`symbol` 前缀硬编码**：SH/SZ/HK/US —— 港股 `00700` 是 `'HK00700'`，美股 `AAPL` 是 `'AAPL'`（无前缀）
 3. **kline 的 `begin` 是毫秒 unix**，不是秒
 4. **screener 的 `type`**：`sh_sz / hk / us` 必传，漏了拿空数组

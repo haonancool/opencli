@@ -65,15 +65,22 @@ export async function fetchXueqiuJson(page, url) {
  * Use this when the caller needs to distinguish auth, anti-bot, empty, and
  * incompatible payloads. Page must already be navigated to xueqiu.com.
  *
+ * The URL is resolved against the page's own origin: xueqiu.com sometimes
+ * redirects the homepage to www.xueqiu.com, and a cross-origin fetch (www
+ * page → apex API, or vice versa) with the `x-requested-with` header trips a
+ * CORS preflight that xueqiu's openresty rejects with 400 — the GET never
+ * runs. Passing a site-relative path keeps every request same-origin.
+ *
  * @param page Active browser page.
- * @param url Absolute xueqiu API URL.
+ * @param urlOrPath Site-relative API path (recommended) or absolute xueqiu URL.
  * @returns Structured response for command-side classification.
  */
-export async function fetchXueqiuEnvelope(page, url) {
+export async function fetchXueqiuEnvelope(page, urlOrPath) {
     return page.evaluate(`
     (async () => {
+      const target = new URL(${JSON.stringify(urlOrPath)}, location.origin);
       try {
-        const response = await fetch(${JSON.stringify(url)}, {
+        const response = await fetch(target.toString(), {
           credentials: 'include',
           headers: {
             'accept': 'application/json, text/plain, */*',

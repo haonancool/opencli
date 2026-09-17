@@ -172,7 +172,7 @@ export async function fetchInPage(page, url) {
  * @returns The matched raw user object.
  */
 export async function resolveUserByQuery(page, query) {
-    const url = `https://xueqiu.com/query/v1/search/user.json?q=${encodeURIComponent(query)}&count=${USER_SEARCH_COUNT}&page=1`;
+    const url = `/query/v1/search/user.json?q=${encodeURIComponent(query)}&count=${USER_SEARCH_COUNT}&page=1`;
     const response = await fetchInPage(page, url);
     const classified = classifySearchResponse(response);
     if (classified.kind === 'auth' || classified.kind === 'anti-bot') {
@@ -325,7 +325,7 @@ export function summarizeStatusComments(comments, textLength = COMMENT_PREVIEW_T
  * @returns Structured response for command-side classification.
  */
 export async function fetchStatusComments(page, statusId, size) {
-    return fetchInPage(page, `https://xueqiu.com/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&type=4&size=${size}&max_id=-1`);
+    return fetchInPage(page, `/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&type=4&size=${size}&max_id=-1`);
 }
 
 /**
@@ -413,7 +413,7 @@ cli({
             startPage,
             pageSize: USER_TIMELINE_PAGE_SIZE,
             maxRequests: 5,
-            fetchPage: (pageNumber, currentPageSize) => fetchInPage(page, `https://xueqiu.com/v4/statuses/user_timeline.json?user_id=${userId}&page=${pageNumber}&count=${currentPageSize}`),
+            fetchPage: (pageNumber, currentPageSize) => fetchInPage(page, `/v4/statuses/user_timeline.json?user_id=${userId}&page=${pageNumber}&count=${currentPageSize}`),
             warn: log.warn,
         });
         if (rows.length === 0) {
