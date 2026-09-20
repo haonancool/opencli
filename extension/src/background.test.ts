@@ -776,6 +776,50 @@ describe('background tab isolation', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('retries a transient "Navigation rejected" from tabs.update and succeeds', async () => {
+    const { chrome, tabs } = createChromeMock();
+    const onUpdatedListeners: Array<(id: number, info: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => void> = [];
+    chrome.tabs.onUpdated.addListener = vi.fn((fn) => { onUpdatedListeners.push(fn); });
+    chrome.tabs.onUpdated.removeListener = vi.fn((fn) => {
+      const idx = onUpdatedListeners.indexOf(fn);
+      if (idx >= 0) onUpdatedListeners.splice(idx, 1);
+    });
+    // First update mimics Chromium's opaque "Navigation rejected" — a null
+    // navigation handle from LoadURLWithParams when the placeholder tab is
+    // still settling its about:blank load from the previous lease release.
+    let updateCalls = 0;
+    chrome.tabs.update = vi.fn(async (tabId: number, updates: { active?: boolean; url?: string }) => {
+      const tab = tabs.find((entry) => entry.id === tabId);
+      if (!tab) throw new Error(`Unknown tab ${tabId}`);
+      if (updates.url !== undefined) {
+        updateCalls += 1;
+        if (updateCalls === 1) throw new Error('Navigation rejected.');
+        tab.url = updates.url;
+        tab.status = 'complete';
+        for (const listener of [...onUpdatedListeners]) {
+          listener(tabId, { status: 'complete', url: tab.url }, tab as chrome.tabs.Tab);
+        }
+      }
+      if (updates.active !== undefined) tab.active = updates.active;
+      return tab;
+    });
+    vi.stubGlobal('chrome', chrome);
+
+    const mod = await import('./background');
+    mod.__test__.setAutomationWindowId(adapterKey('twitter'), 1);
+
+    const result = await mod.__test__.handleNavigate(
+      { id: 'rejected-nav', action: 'navigate', url: 'https://www.douyin.com', session: adapterKey('twitter') },
+      adapterKey('twitter'),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(updateCalls).toBe(2);
+    expect(result).toEqual(expect.objectContaining({
+      data: expect.objectContaining({ url: 'https://www.douyin.com', timedOut: false }),
+    }));
+  });
+
   it('keeps the debugger attached during navigation when network capture is active', async () => {
     const { chrome, tabs } = createChromeMock();
     const onUpdatedListeners: Array<(id: number, info: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => void> = [];

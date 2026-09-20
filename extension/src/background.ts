@@ -1092,7 +1092,7 @@ async function createOwnedTabLeaseUnlocked(leaseKey: string, initialUrl?: string
   if (initialTabIsAvailable(initialTabId)) {
     tab = await chrome.tabs.get(initialTabId);
     if (!isTargetUrl(tab.url, targetUrl)) {
-      tab = await chrome.tabs.update(initialTabId, { url: targetUrl });
+      tab = await updateTabUrl(initialTabId, { url: targetUrl });
       await new Promise(resolve => setTimeout(resolve, 300));
       tab = await chrome.tabs.get(initialTabId);
     }
@@ -1720,6 +1720,32 @@ function preferOwnedTab(leaseKey: string, tabId: number): void {
   });
 }
 
+/**
+ * `chrome.tabs.update` maps to NavigationController::LoadURLWithParams, which
+ * returns a null handle (surfaced to extensions as the opaque "Navigation
+ * rejected") whenever a navigation throttle cancels the request synchronously
+ * or the tab is mid-teardown — typically a placeholder tab still settling its
+ * `about:blank` load from the previous lease release. The state clears on its
+ * own within milliseconds, so a short retry recovers what used to look like a
+ * permanent failure to the CLI.
+ */
+async function updateTabUrl(tabId: number, updateProps: chrome.tabs.UpdateProperties): Promise<chrome.tabs.Tab> {
+  const attempts = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await chrome.tabs.update(tabId, updateProps);
+    } catch (err) {
+      lastError = err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/Navigation rejected/i.test(message)) throw err;
+      console.warn(`[opencli] tabs.update(${updateProps.url ?? ''}) rejected (attempt ${attempt + 1}/${attempts}), retrying after 150ms`);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+  throw lastError;
+}
+
 async function handleNavigate(cmd: Command, leaseKey: string): Promise<Result> {
   if (!cmd.url) return { id: cmd.id, ok: false, error: 'Missing url' };
   if (!isSafeNavigationUrl(cmd.url)) {
@@ -1751,7 +1777,7 @@ async function handleNavigate(cmd: Command, leaseKey: string): Promise<Result> {
     await executor.detach(tabId);
   }
 
-  await chrome.tabs.update(tabId, { url: targetUrl });
+  await updateTabUrl(tabId, { url: targetUrl });
 
   // Wait until navigation completes. Resolve when status is 'complete' AND either:
   // - the URL matches the target (handles same-URL / canonicalized navigations), OR
@@ -2148,7 +2174,7 @@ async function releaseLease(leaseKey: string, reason: string = 'released'): Prom
         console.log(`[opencli] Released owned tab lease ${tabId} (session=${session.session}, surface=${session.surface}, ${reason})`);
       } else {
         try {
-          const tab = await chrome.tabs.update(tabId, { url: BLANK_PAGE, active: true });
+          const tab = await updateTabUrl(tabId, { url: BLANK_PAGE, active: true });
           const group = await ensureOwnedContainerGroup(getOwnedWindowRole(leaseKey), session.windowId, [tab.id ?? tabId]);
           if (group) session.windowId = group.windowId;
           console.log(`[opencli] Released owned tab lease ${tabId} as reusable placeholder (session=${session.session}, surface=${session.surface}, ${reason})`);

@@ -372,6 +372,51 @@ describe('Page active target tracking', () => {
     expect(sendCommandFullMock).toHaveBeenCalledTimes(2);
   });
 
+  // Regression: Chromium rejects chrome.tabs.update with "Navigation rejected."
+  // when the automation placeholder tab is still settling its about:blank load
+  // from the previous lease release. goto() must recycle the lease and retry
+  // instead of surfacing the error to the command (douyin user-videos et al.).
+  it('recycles the lease and retries when navigation is rejected', async () => {
+    sendCommandFullMock
+      .mockRejectedValueOnce(new Error('Navigation rejected.'))
+      .mockResolvedValueOnce({ data: { url: 'https://www.douyin.com' }, page: 'page-fresh' });
+    sendCommandMock.mockResolvedValue(null);
+    sendCommandMock.mockClear();
+
+    const page = new Page('site:douyin:abc', undefined, undefined, undefined, 'adapter', 'ephemeral');
+
+    await page.goto('https://www.douyin.com', { waitUntil: 'none' });
+
+    expect(sendCommandFullMock).toHaveBeenCalledTimes(2); // navigate fail, navigate success
+    // closeWindow releases the lease via sendCommand before the retry.
+    expect(sendCommandMock).toHaveBeenCalledWith('close-window', expect.objectContaining({
+      session: 'site:douyin:abc',
+    }));
+    expect(page.getActivePage()).toBe('page-fresh');
+    expect(warnMock).toHaveBeenCalled();
+  });
+
+  it('falls back to a new tab when the navigation retry is rejected again', async () => {
+    sendCommandFullMock
+      .mockRejectedValueOnce(new Error('Navigation rejected.'))
+      .mockRejectedValueOnce(new Error('Navigation rejected.'))
+      .mockResolvedValueOnce({ data: { url: 'https://www.douyin.com' }, page: 'page-newtab' });
+    sendCommandMock.mockResolvedValue(null);
+    sendCommandMock.mockClear();
+
+    const page = new Page('site:douyin:abc', undefined, undefined, undefined, 'adapter', 'ephemeral');
+
+    await page.goto('https://www.douyin.com', { waitUntil: 'none' });
+
+    // navigate fail, navigate retry fail, tabs new (close-window goes through sendCommand)
+    expect(sendCommandFullMock).toHaveBeenCalledTimes(3);
+    expect(sendCommandFullMock).toHaveBeenNthCalledWith(3, 'tabs', expect.objectContaining({
+      op: 'new',
+      url: 'https://www.douyin.com',
+    }));
+    expect(page.getActivePage()).toBe('page-newtab');
+  });
+
   it('does not retry unrelated navigate errors that only mention Page not found in details', async () => {
     sendCommandFullMock
       .mockResolvedValueOnce({ data: { url: 'https://example.com/first' }, page: 'page-1' })

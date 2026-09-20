@@ -36,6 +36,14 @@ function isStalePageIdentityError(err: unknown): boolean {
   return message.includes('stale page identity') || /^Page not found:\s*\S+\s*$/.test(message);
 }
 
+// Chrome maps chrome.tabs.update onto NavigationController::LoadURLWithParams,
+// which yields a null navigation handle (surfaced as the opaque "Navigation
+// rejected.") when a throttle cancels the load synchronously or the tab is
+// mid-teardown. No navigation has started, so retrying on a fresh tab is safe.
+function isNavigationRejectedError(err: unknown): boolean {
+  return /Navigation rejected/i.test(err instanceof Error ? err.message : String(err));
+}
+
 /**
  * Page — implements IPage by talking to the daemon via HTTP.
  */
@@ -89,6 +97,34 @@ export class Page extends CDPBasePage {
   }
 
   async goto(url: string, options?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<void> {
+    try {
+      await this._gotoOnce(url, options);
+    } catch (err) {
+      // Chromium rejects chrome.tabs.update with an opaque "Navigation rejected."
+      // when the tab is mid-teardown or still settling a placeholder load (e.g.
+      // the about:blank left behind by the previous lease release). Recover the
+      // same way the google images adapter does: release the lease so the
+      // extension can hand back a settled tab, then fall back to a brand-new
+      // tab created directly at the target URL (tabs.create bypasses the
+      // rejection entirely).
+      if (!isNavigationRejectedError(err)) throw err;
+      log.warn(`goto(${url}) was rejected by the browser — recycling the automation tab and retrying`);
+      await this.closeWindow();
+      try {
+        await this._gotoOnce(url, options);
+      } catch (retryErr) {
+        if (!isNavigationRejectedError(retryErr)) throw retryErr;
+        const pageId = await this.newTab(url);
+        if (pageId) {
+          this.setActivePage(pageId);
+          return;
+        }
+        throw retryErr;
+      }
+    }
+  }
+
+  private async _gotoOnce(url: string, options?: { waitUntil?: 'load' | 'none'; settleMs?: number }): Promise<void> {
     let result: { data: unknown; page?: string };
     try {
       result = await sendCommandFull('navigate', {
