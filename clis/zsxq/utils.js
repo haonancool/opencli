@@ -160,12 +160,10 @@ export function unwrapRespData(payload) {
     }
     if (record.succeeded === false) {
         const code = typeof record.code === 'number' ? String(record.code) : 'API_ERROR';
-        const message = typeof record.info === 'string'
-            ? record.info
-            : typeof record.error === 'string'
-                ? record.error
-                : 'ZSXQ API returned an error';
-        throw new CliError(code, message);
+        // ZSXQ often answers with an empty info (e.g. code 13701 for unknown file ids).
+        const message = [record.info, record.error]
+            .find(value => typeof value === 'string' && value.trim());
+        throw new CliError(code, message || `ZSXQ API error ${code}`);
     }
     return (record.resp_data ?? record.data ?? payload);
 }
@@ -226,7 +224,9 @@ function normalizeTopicText(value) {
     return typeof value === 'string' ? value : '';
 }
 export function getTopicFiles(topic) {
-    const files = pickArray(topic.talk?.files);
+    // mirrors the official web client, which renders app-file-gallery from
+    // talk.files / task.files / solution.files (never answer or question)
+    const files = pickArray(topic.talk?.files, topic.task?.files, topic.solution?.files);
     return files
         .map((entry) => {
         const file = asRecord(entry?.file) || asRecord(entry);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { browserJsonRequest, getFileDownloadInfo, getTopicCommentItems, getTopicFiles, getTopicLookupIds, getTopicText, toTopicRow } from './utils.js';
+import { browserJsonRequest, getFileDownloadInfo, getTopicCommentItems, getTopicFiles, getTopicLookupIds, getTopicText, toTopicRow, unwrapRespData } from './utils.js';
 
 describe('zsxq utils', () => {
     it('keeps title and content separate when both fields exist', () => {
@@ -82,6 +82,26 @@ describe('zsxq utils', () => {
             ],
         });
         expect(toTopicRow(topic)).not.toHaveProperty('file_preview');
+    });
+
+    it('extracts files from task and solution carriers like the official client', () => {
+        expect(getTopicFiles({
+            topic_id: 't-1',
+            task: { files: [{ file_id: 7, name: 'sheet.xlsx' }] },
+        })).toEqual([{ file_id: 7, name: 'sheet.xlsx' }]);
+        expect(toTopicRow({
+            topic_id: 's-1',
+            solution: { files: [{ file_id: 8, name: 'notes.pdf' }] },
+        })).toMatchObject({ files: [{ file_id: 8, name: 'notes.pdf' }] });
+    });
+
+    it('surfaces a default message when the API error info is empty', () => {
+        expect(() => unwrapRespData({ succeeded: false, code: 13701, info: '' }))
+            .toThrow('ZSXQ API error 13701');
+        expect(() => unwrapRespData({ succeeded: false, code: 13701 }))
+            .toThrow('ZSXQ API error 13701');
+        expect(() => unwrapRespData({ succeeded: false, code: 14001, info: 'count too large' }))
+            .toThrow('count too large');
     });
 
     it('unwraps and validates file download metadata', () => {
