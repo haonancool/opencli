@@ -46997,6 +46997,13 @@
         "default": 800,
         "required": false,
         "help": "Comments to return (max 800, 0 = post only)"
+      },
+      {
+        "name": "timeout",
+        "type": "int",
+        "default": 300,
+        "required": false,
+        "help": "Max seconds for the overall command (default: 300 — paced comment and reply pagination)"
       }
     ],
     "columns": [

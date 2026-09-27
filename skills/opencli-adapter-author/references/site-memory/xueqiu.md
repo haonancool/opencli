@@ -30,6 +30,7 @@
 - `GET xueqiu.com/query/v1/search/user.json?q=<q>` — 用户搜索（结果在 `list[]`；无匹配返回空 `list`）
 - `GET xueqiu.com/statuses/show.json?id=<statusId>` — 单帖详情（`text` 是 HTML 正文，`description` 是纯文本摘要；不存在返回 400 `error_code 20210`）
 - `GET xueqiu.com/statuses/v3/comments.json?id=<statusId>&type=4&size=<n>&max_id=-1` — 帖子评论（翻页用返回的 `next_max_id`，末页 `-1`；公开流是 `reply_count` 的过滤子集，常见上限约 150；页面请求带 `md5__1038` 签名但裸调可用；旧版 `statuses/comments.json?statusId=` 已失效）
+- `GET xueqiu.com/statuses/v3/comments.json?id=<statusId>&comment_id=<rootCommentId>&type=4&child_type=2&size=<n>&max_id=-1` — 某条一级评论下的楼中楼（`comments[0]` 回显该一级评论，回复在其 `child_comments[]`，按 `next_max_id` 翻页；一级评论流里的 `child_comments` 只是最多 5 条的预览，数量看 `comment_reply_count`，`reply_count` 恒为 0；被回复人在 `reply_user.screen_name`，为空即回复一级评论作者）
 
 ## 字段
 
@@ -44,7 +45,8 @@
 4. **screener 的 `type`**：`sh_sz / hk / us` 必传，漏了拿空数组
 5. **帖子评论走 v3**：`statuses/comments.json?statusId=` 已失效（400 `error_code 10020`），用 `statuses/v3/comments.json?id=&type=4&max_id=-1`
 6. **限频明显**：同 symbol 短时间反复调会 403，adapter 层建议加 300ms 间隔
-7. **蛋卷基金（`danjuanfunds.com`）是独立子品牌**：cookie 域不同，要单独获取
+7. **评论接口连续请求会触发 JS 挑战**：几十次请求后返回 HTTP 200 `text/html` 的 `EO_Bot_Ssid` 挑战脚本（不是 JSON）；`isAntiBotHtml` 已识别，重新 `page.goto` 一次 xueqiu 页面即可过挑战后重试（见 `clis/xueqiu/post.js`）
+8. **蛋卷基金（`danjuanfunds.com`）是独立子品牌**：cookie 域不同，要单独获取
 
 ## 可参考的 adapter
 

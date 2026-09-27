@@ -15,9 +15,11 @@ vi.mock('@jackwener/opencli/logger', () => ({
 }));
 import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
 import { getRegistry } from '@jackwener/opencli/registry';
+import { classifyStatusCommentsResponse } from './utils.js';
 import {
     classifyStatusDetailResponse,
     collectCommentRows,
+    getChildCommentItems,
     normalizeCommentItem,
     normalizeStatusDetail,
     parseStatusInput,
@@ -116,6 +118,23 @@ describe('xueqiu post', () => {
             created_at: new Date(1700000001000).toISOString(),
             url: 'https://xueqiu.com/22/11',
         });
+    });
+    it('normalizes nested reply counts and falls back to the root author as reply target', () => {
+        expect(normalizeCommentItem(commentItem({ reply_count: 0, comment_reply_count: 13 }))).toMatchObject({ replies: 13, reply_to: null });
+        expect(normalizeCommentItem(commentItem({ reply_user: { screen_name: 'carol' } }), 'alice').reply_to).toBe('carol');
+        expect(normalizeCommentItem(commentItem({ reply_user: null }), 'alice').reply_to).toBe('alice');
+    });
+    it('extracts child comments from the root echoed by the child_type=2 endpoint', () => {
+        const json = { comments: [{ id: 7, child_comments: [commentItem({ id: 71 }), commentItem({ id: 72 })] }] };
+        expect(getChildCommentItems(json, '7').map(item => item.id)).toEqual([71, 72]);
+        expect(getChildCommentItems({ comments: [] }, '7')).toEqual([]);
+        expect(getChildCommentItems({ error: 'x' }, '7')).toBeNull();
+    });
+    it('classifies the EO_Bot_Ssid JS challenge as anti-bot', () => {
+        expect(classifyStatusCommentsResponse(envelope(null, {
+            contentType: 'text/html',
+            textSnippet: '<script>function a(a){case"0":t+="EO_Bot_Ssid=";continue;}</script>',
+        }))).toMatchObject({ kind: 'anti-bot' });
     });
     it('registers the xueqiu post command', () => {
         expect(command).toMatchObject({ site: 'xueqiu', name: 'post' });
@@ -257,6 +276,81 @@ describe('xueqiu post', () => {
         expect(mockWarn).toHaveBeenCalledTimes(1);
         expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('2/5'));
         expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('auth failure'));
+    });
+    it('uses the embedded child preview when it already covers every nested reply', async () => {
+        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
+            comments: [commentItem({
+                id: 1,
+                comment_reply_count: 2,
+                child_comments: [commentItem({ id: 11, text: 'r1', user: { screen_name: 'carol', id: 33 } }), commentItem({ id: 12, text: 'r2', reply_user: { screen_name: 'carol' } })],
+            })],
+            next_max_id: -1,
+        }));
+        const fetchChildPage = vi.fn();
+        const result = await collectCommentRows({
+            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
+        });
+        expect(result.map(row => [row.id, row.reply_to])).toEqual([['1', null], ['11', 'bob'], ['12', 'carol']]);
+        expect(fetchChildPage).not.toHaveBeenCalled();
+    });
+    it('paginates nested replies after each root comment when the preview is partial', async () => {
+        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
+            comments: [
+                commentItem({ id: 1, comment_reply_count: 3, child_comments: [commentItem({ id: 11 })] }),
+                commentItem({ id: 2 }),
+            ],
+            next_max_id: -1,
+        }));
+        const fetchChildPage = vi
+            .fn()
+            .mockResolvedValueOnce(envelope({ comments: [{ id: 1, child_comments: [commentItem({ id: 11 }), commentItem({ id: 12 })] }], next_max_id: 12 }))
+            .mockResolvedValueOnce(envelope({ comments: [{ id: 1, child_comments: [commentItem({ id: 13 })] }], next_max_id: -1 }));
+        const result = await collectCommentRows({
+            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
+        });
+        expect(result.map(row => row.id)).toEqual(['1', '11', '12', '13', '2']);
+        expect(fetchChildPage).toHaveBeenNthCalledWith(1, '1', -1, 20);
+        expect(fetchChildPage).toHaveBeenNthCalledWith(2, '1', 12, 20);
+        expect(mockWarn).not.toHaveBeenCalled();
+    });
+    it('counts nested replies toward the limit', async () => {
+        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
+            comments: [commentItem({ id: 1, comment_reply_count: 2, child_comments: [commentItem({ id: 11 }), commentItem({ id: 12 })] }), commentItem({ id: 2 })],
+            next_max_id: -1,
+        }));
+        const result = await collectCommentRows({
+            statusId: '99380989', limit: 2, pageSize: 20, maxPages: 5, fetchPage, warn: mockWarn,
+        });
+        expect(result.map(row => row.id)).toEqual(['1', '11']);
+    });
+    it('returns partial rows and warns when a nested reply page fails', async () => {
+        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
+            comments: [commentItem({ id: 1, comment_reply_count: 5, child_comments: [] }), commentItem({ id: 2 })],
+            next_max_id: -1,
+        }));
+        const fetchChildPage = vi.fn().mockResolvedValueOnce(envelope({ success: false }));
+        const result = await collectCommentRows({
+            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
+        });
+        expect(result.map(row => row.id)).toEqual(['1']);
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('replies to comment 1'));
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('unexpected response shape'));
+    });
+    it('recovers from a mid-run anti-bot challenge and retries the same page', async () => {
+        const challenge = envelope(null, { contentType: 'text/html', textSnippet: '<script>t+="EO_Bot_Ssid="</script>' });
+        const fetchPage = vi
+            .fn()
+            .mockResolvedValueOnce(envelope({ comments: [commentItem({ id: 1 })], next_max_id: 1 }))
+            .mockResolvedValueOnce(challenge)
+            .mockResolvedValueOnce(envelope({ comments: [commentItem({ id: 2 })], next_max_id: -1 }));
+        const recover = vi.fn().mockResolvedValue(undefined);
+        const result = await collectCommentRows({
+            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, recover, maxRecoveries: 1, warn: mockWarn,
+        });
+        expect(result.map(row => row.id)).toEqual(['1', '2']);
+        expect(recover).toHaveBeenCalledTimes(1);
+        expect(fetchPage).toHaveBeenNthCalledWith(3, 1, 20);
+        expect(mockWarn).not.toHaveBeenCalled();
     });
     it('ends comment pagination quietly when next_max_id is -1', async () => {
         const fetchPage = vi.fn().mockResolvedValueOnce(envelope({

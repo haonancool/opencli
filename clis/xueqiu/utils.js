@@ -120,7 +120,7 @@ export function isAntiBotHtml(response, envelopeText = '') {
     const htmlText = `${envelopeText} ${response.textSnippet}`.toLowerCase();
     return response.contentType.includes('text/html')
         && (/captcha|challenge|aliyun_waf|risk/i.test(htmlText)
-            || /_WAF_|_waf_|renderData|aliyun_waf/i.test(response.textSnippet));
+            || /_WAF_|_waf_|renderData|aliyun_waf|EO_Bot_Ssid/i.test(response.textSnippet));
 }
 
 export function envelopeTextFromJson(jsonRecord) {
