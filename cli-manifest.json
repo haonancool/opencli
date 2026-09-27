@@ -47009,6 +47009,7 @@
     "columns": [
       "type",
       "id",
+      "parent_id",
       "author",
       "text",
       "reply_to",

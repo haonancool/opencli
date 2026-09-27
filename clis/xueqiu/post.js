@@ -88,6 +88,7 @@ export function normalizeStatusDetail(item) {
     return {
         type: 'post',
         id,
+        parent_id: null,
         author: String(item.user?.screen_name ?? ''),
         text,
         reply_to: null,
@@ -103,19 +104,20 @@ export function normalizeStatusDetail(item) {
  * Normalize one raw comment item into the comment output row.
  *
  * @param item Raw comment object from `statuses/v3/comments.json`.
- * @param parentAuthor Author of the root comment when `item` is a nested reply.
+ * @param root Root comment `{ id, author }` when `item` is a nested reply.
  * @returns Public comment row (`type=comment`).
  */
-export function normalizeCommentItem(item, parentAuthor = null) {
+export function normalizeCommentItem(item, root = null) {
     const id = normalizeIdentifier(item.id);
     const userId = normalizeIdentifier(item.user_id) || normalizeIdentifier(item.user?.id);
     const replyTo = String(item.reply_screenName
         ?? item.reply_user?.screen_name
         ?? item.reply_comment?.user?.screen_name
-        ?? '').trim() || parentAuthor || null;
+        ?? '').trim() || root?.author || null;
     return {
         type: 'comment',
         id,
+        parent_id: root?.id || null,
         author: String(item.user?.screen_name ?? ''),
         text: stripTags(item.text),
         reply_to: replyTo,
@@ -271,7 +273,7 @@ export async function collectCommentRows(options) {
                 return rows;
             const children = await collectChildItems(rawItem, rootRow.id, childOptions, request);
             for (const childItem of children.items) {
-                pushRow(normalizeCommentItem(childItem, rootRow.author || null));
+                pushRow(normalizeCommentItem(childItem, rootRow));
                 if (rows.length >= options.limit)
                     return rows;
             }
@@ -321,7 +323,7 @@ cli({
         { name: 'comment_limit', type: 'int', default: COMMENT_LIMIT_MAX, help: `Comments to return (max ${COMMENT_LIMIT_MAX}, 0 = post only)` },
         { name: 'timeout', type: 'int', default: 300, help: 'Max seconds for the overall command (default: 300 — paced comment and reply pagination)' },
     ],
-    columns: ['type', 'id', 'author', 'text', 'reply_to', 'likes', 'replies', 'retweets', 'created_at', 'url'],
+    columns: ['type', 'id', 'parent_id', 'author', 'text', 'reply_to', 'likes', 'replies', 'retweets', 'created_at', 'url'],
     func: async (page, args) => {
         const statusId = parseStatusInput(args.status);
         const commentLimit = Number(args.comment_limit ?? COMMENT_LIMIT_MAX);

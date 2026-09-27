@@ -89,6 +89,7 @@ describe('xueqiu post', () => {
         expect(normalizeStatusDetail(statusDetail())).toEqual({
             type: 'post',
             id: '99380989',
+            parent_id: null,
             author: 'alice',
             text: 'hello world',
             reply_to: null,
@@ -109,6 +110,7 @@ describe('xueqiu post', () => {
         }))).toEqual({
             type: 'comment',
             id: '11',
+            parent_id: null,
             author: 'bob',
             text: 'nice',
             reply_to: 'alice',
@@ -121,8 +123,8 @@ describe('xueqiu post', () => {
     });
     it('normalizes nested reply counts and falls back to the root author as reply target', () => {
         expect(normalizeCommentItem(commentItem({ reply_count: 0, comment_reply_count: 13 }))).toMatchObject({ replies: 13, reply_to: null });
-        expect(normalizeCommentItem(commentItem({ reply_user: { screen_name: 'carol' } }), 'alice').reply_to).toBe('carol');
-        expect(normalizeCommentItem(commentItem({ reply_user: null }), 'alice').reply_to).toBe('alice');
+        expect(normalizeCommentItem(commentItem({ reply_user: { screen_name: 'carol' } }), { id: '7', author: 'alice' })).toMatchObject({ parent_id: '7', reply_to: 'carol' });
+        expect(normalizeCommentItem(commentItem({ reply_user: null }), { id: '7', author: 'alice' })).toMatchObject({ parent_id: '7', reply_to: 'alice' });
     });
     it('extracts child comments from the root echoed by the child_type=2 endpoint', () => {
         const json = { comments: [{ id: 7, child_comments: [commentItem({ id: 71 }), commentItem({ id: 72 })] }] };
@@ -184,6 +186,7 @@ describe('xueqiu post', () => {
             'created_at',
             'id',
             'likes',
+            'parent_id',
             'replies',
             'reply_to',
             'retweets',
@@ -290,7 +293,7 @@ describe('xueqiu post', () => {
         const result = await collectCommentRows({
             statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
         });
-        expect(result.map(row => [row.id, row.reply_to])).toEqual([['1', null], ['11', 'bob'], ['12', 'carol']]);
+        expect(result.map(row => [row.id, row.parent_id, row.reply_to])).toEqual([['1', null, null], ['11', '1', 'bob'], ['12', '1', 'carol']]);
         expect(fetchChildPage).not.toHaveBeenCalled();
     });
     it('paginates nested replies after each root comment when the preview is partial', async () => {
