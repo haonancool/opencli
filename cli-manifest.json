@@ -43405,7 +43405,7 @@
   {
     "site": "weibo",
     "name": "post",
-    "description": "Get a single Weibo post",
+    "description": "Get a single Weibo post with image, video, and live replay URLs",
     "access": "read",
     "domain": "weibo.com",
     "strategy": "cookie",
@@ -43534,7 +43534,7 @@
   {
     "site": "weibo",
     "name": "user-posts",
-    "description": "List Weibo posts from a user, optionally filtered by date range",
+    "description": "List Weibo posts from a user, optionally filtered by date range and post type",
     "access": "read",
     "domain": "weibo.com",
     "strategy": "cookie",
@@ -43560,6 +43560,21 @@
         "help": "End date in Asia/Shanghai (YYYY-MM-DD)"
       },
       {
+        "name": "type",
+        "type": "str",
+        "default": "全部",
+        "required": false,
+        "help": "Filter by post type (全部, 文字, 图文, 视频, 直播, 文章)",
+        "choices": [
+          "全部",
+          "文字",
+          "图文",
+          "视频",
+          "直播",
+          "文章"
+        ]
+      },
+      {
         "name": "limit",
         "type": "int",
         "default": 20,
@@ -43578,6 +43593,7 @@
       "rank",
       "id",
       "mblogid",
+      "type",
       "author",
       "uid",
       "text",

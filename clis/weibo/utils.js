@@ -2,6 +2,21 @@
  * Shared Weibo utilities — uid extraction.
  */
 import { AuthRequiredError, CommandExecutionError } from '@jackwener/opencli/errors';
+/** Shared, self-contained classifier, also serialized into browser evaluate scripts. */
+export function classifyPostType(post) {
+    function ownMediaType(status) {
+        if (!status) return null;
+        const info = status.page_info || {};
+        const media = info.media_info || {};
+        if (info.object_type === 'live' || media.live_id) return '直播';
+        if (info.object_type === 'video' || media.media_type === 'video') return '视频';
+        if (info.object_type === 'article') return '文章';
+        if (Number(status.pic_num) > 0 || status.pic_ids?.length || Object.keys(status.pic_infos || {}).length) return '图文';
+        return null;
+    }
+    return ownMediaType(post) || ownMediaType(post?.retweeted_status) || '文字';
+}
+
 /**
  * `page.evaluate` may return either the raw IIFE value or a
  * `{ session, data }` envelope depending on the browser-bridge version.

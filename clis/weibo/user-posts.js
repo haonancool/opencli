@@ -3,11 +3,23 @@
  */
 import { cli, Strategy } from '@jackwener/opencli/registry';
 import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
-import { unwrapEvaluateResult } from './utils.js';
+import { classifyPostType, unwrapEvaluateResult } from './utils.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const POST_TYPES = ['文字', '图文', '视频', '直播', '文章'];
+const TYPE_CHOICES = ['全部', ...POST_TYPES];
+
+function readType(raw) {
+    if (raw === undefined || raw === null) return null;
+    const value = String(raw).trim();
+    if (value === '全部') return null;
+    if (!POST_TYPES.includes(value)) {
+        throw new ArgumentError(`weibo user-posts type must be one of: ${TYPE_CHOICES.join(', ')}`);
+    }
+    return value;
+}
 
 function readRequiredId(raw) {
     const value = String(raw ?? '').trim();
@@ -81,20 +93,22 @@ cli({
     site: 'weibo',
     name: 'user-posts',
     access: 'read',
-    description: 'List Weibo posts from a user, optionally filtered by date range',
+    description: 'List Weibo posts from a user, optionally filtered by date range and post type',
     domain: 'weibo.com',
     strategy: Strategy.COOKIE,
     args: [
         { name: 'id', positional: true, required: true, help: 'User ID (numeric uid) or screen name' },
         { name: 'start', help: 'Start date in Asia/Shanghai (YYYY-MM-DD)' },
         { name: 'end', help: 'End date in Asia/Shanghai (YYYY-MM-DD)' },
+        { name: 'type', default: '全部', choices: TYPE_CHOICES, help: 'Filter by post type (全部, 文字, 图文, 视频, 直播, 文章)' },
         { name: 'limit', type: 'int', default: DEFAULT_LIMIT, help: `Number of posts (1-${MAX_LIMIT})` },
         { name: 'include-retweets', type: 'boolean', default: false, help: 'Include retweets' },
     ],
-    columns: ['rank', 'id', 'mblogid', 'author', 'uid', 'text', 'time', 'reposts', 'comments', 'likes', 'pic_count', 'url'],
+    columns: ['rank', 'id', 'mblogid', 'type', 'author', 'uid', 'text', 'time', 'reposts', 'comments', 'likes', 'pic_count', 'url'],
     func: async (page, kwargs) => {
         const id = readRequiredId(kwargs.id);
         const limit = readLimit(kwargs.limit);
+        const type = readType(kwargs.type);
         const start = readDate(kwargs.start, 'start');
         const end = readDate(kwargs.end, 'end');
         validateRange(start, end);
@@ -109,6 +123,7 @@ cli({
       (async () => {
         const rawId = ${JSON.stringify(id)};
         const limit = ${limit};
+        const wantedType = ${JSON.stringify(type)};
         const includeRetweets = ${includeRetweets};
         const starttime = ${starttime === null ? 'null' : starttime};
         const endtime = ${endtime === null ? 'null' : endtime};
@@ -120,6 +135,10 @@ cli({
           .replace(/&amp;/g, '&')
           .replace(/\\s+/g, ' ')
           .trim();
+
+        // Use the listing's media metadata, including the original post on
+        // retweets, without issuing a detail request for every row.
+        const postType = (${classifyPostType.toString()});
 
         async function readJson(url) {
           const resp = await fetch(url, { credentials: 'include' });
@@ -147,7 +166,11 @@ cli({
         const rows = [];
         let sawList = false;
         let sawPostCandidates = false;
-        for (let page = 1; page <= 20 && rows.length < limit; page++) {
+        let sawExtractablePost = false;
+        let exhausted = false;
+        // A sparse type needs a deeper scan than an unfiltered listing.
+        const maxPages = wantedType ? 100 : 20;
+        for (let page = 1; page <= maxPages && rows.length < limit; page++) {
           const qs = new URLSearchParams();
           qs.set('uid', uid);
           qs.set('page', String(page));
@@ -167,7 +190,10 @@ cli({
           }
           sawList = true;
           if (list.length > 0) sawPostCandidates = true;
-          if (list.length === 0) break;
+          if (list.length === 0) {
+            exhausted = true;
+            break;
+          }
 
           for (const post of list) {
             if (rows.length >= limit) break;
@@ -176,9 +202,13 @@ cli({
             const user = post.user || {};
             const text = post.text_raw || strip(post.text || '');
             if (!postId || !mblogid || !text) continue;
+            sawExtractablePost = true;
+            const type = postType(post);
+            if (wantedType && type !== wantedType) continue;
             rows.push({
               id: postId,
               mblogid,
+              type,
               author: user.screen_name || '',
               uid: user.id === undefined || user.id === null ? uid : String(user.id),
               text,
@@ -191,10 +221,18 @@ cli({
             });
           }
 
-          if (list.length < 10) break;
+          if (!wantedType && list.length < 10) {
+            exhausted = true;
+            break;
+          }
         }
 
-        return [uid, rows, sawList, sawPostCandidates];
+        const onlyInvalidCandidates = sawPostCandidates && !sawExtractablePost;
+        if (wantedType && !exhausted && rows.length < limit && !onlyInvalidCandidates) {
+          return {error: 'Weibo type filter reached the ' + maxPages + '-page scan limit with ' + rows.length
+            + ' matching posts. Narrow the date range with --start/--end or lower --limit.'};
+        }
+        return [uid, rows, sawList, onlyInvalidCandidates];
       })()
     `);
 
@@ -205,21 +243,24 @@ cli({
         if (!Array.isArray(payload) || payload.length !== 4 || !Array.isArray(payload[1])) {
             throw new CommandExecutionError('weibo user-posts returned malformed extraction payload');
         }
-        const [resolvedUid, rows, sawList, sawPostCandidates] = payload;
+        const [resolvedUid, rows, sawList, onlyInvalidCandidates] = payload;
         if (!sawList && rows.length === 0) {
             throw new CommandExecutionError('weibo user-posts did not observe a valid posts list');
         }
-        if (sawPostCandidates && rows.length === 0) {
+        if (onlyInvalidCandidates && rows.length === 0) {
             throw new CommandExecutionError('weibo user-posts found post candidates but could not extract valid rows');
         }
         if (rows.length === 0) {
-            throw new EmptyResultError('weibo user-posts', 'No Weibo posts found for this user/date range');
+            throw new EmptyResultError('weibo user-posts', type
+                ? `No Weibo posts of type "${type}" found for this user/date range`
+                : 'No Weibo posts found for this user/date range');
         }
 
         return rows.slice(0, limit).map((row, index) => ({
             rank: index + 1,
             id: String(row.id),
             mblogid: row.mblogid || '',
+            type: row.type,
             author: row.author || '',
             uid: String(row.uid || resolvedUid || ''),
             text: row.text || '',
