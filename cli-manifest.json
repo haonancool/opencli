@@ -2993,6 +2993,530 @@
     "sourceFile": "autohome/score.js"
   },
   {
+    "site": "baidu-netdisk",
+    "name": "delete",
+    "description": "Delete a Baidu Netdisk file or directory to the recycle bin",
+    "access": "write",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote file or directory path"
+      },
+      {
+        "name": "recursive",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Allow deletion of a directory and its contents"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id",
+      "status"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "info",
+    "description": "View metadata for a Baidu Netdisk file or directory",
+    "access": "read",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote file or directory path"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "list",
+    "description": "List files and subdirectories in Baidu Netdisk",
+    "access": "read",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "dir",
+        "type": "str",
+        "default": "/",
+        "required": false,
+        "help": "Absolute remote directory path"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 100,
+        "required": false,
+        "help": "Maximum results (1-10000; follows pagination)"
+      },
+      {
+        "name": "page",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Starting API page (100 entries per page)"
+      },
+      {
+        "name": "sort",
+        "type": "str",
+        "default": "name",
+        "required": false,
+        "help": "Sort field",
+        "choices": [
+          "name",
+          "time",
+          "size"
+        ]
+      },
+      {
+        "name": "desc",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Descending sort"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "login-status",
+    "description": "Check the current Baidu Netdisk browser login session",
+    "access": "read",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "loggedIn",
+      "status",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/auth.js",
+    "sourceFile": "baidu-netdisk/auth.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "mkdir",
+    "description": "Create a Baidu Netdisk directory (parent must exist)",
+    "access": "write",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote file or directory path"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "move",
+    "description": "Move a Baidu Netdisk file or directory without overwriting",
+    "access": "write",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote file or directory path"
+      },
+      {
+        "name": "to",
+        "type": "str",
+        "required": true,
+        "help": "Existing destination directory"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "rename",
+    "description": "Rename a Baidu Netdisk file or directory without overwriting",
+    "access": "write",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote file or directory path"
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "required": true,
+        "help": "New basename (without directory path)"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "search",
+    "description": "Search Baidu Netdisk filenames recursively",
+    "access": "read",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Filename keyword"
+      },
+      {
+        "name": "dir",
+        "type": "str",
+        "default": "/",
+        "required": false,
+        "help": "Absolute remote directory path"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 100,
+        "required": false,
+        "help": "Maximum results (1-10000; follows pagination)"
+      },
+      {
+        "name": "page",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Starting API page (100 entries per page)"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "upload",
+    "description": "Queue a local file for background, resumable Baidu Netdisk upload",
+    "access": "write",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "file",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Local regular file path"
+      },
+      {
+        "name": "dir",
+        "type": "str",
+        "default": "/",
+        "required": false,
+        "help": "Absolute remote directory path"
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "required": false,
+        "help": "Remote basename (defaults to local filename)"
+      },
+      {
+        "name": "paused",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Create a paused task without starting transfer"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "upload-pause",
+    "description": "Pause an OpenCLI upload, aborting its in-flight part",
+    "access": "write",
+    "strategy": "local",
+    "browser": false,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "OpenCLI upload task ID (from uploads)"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js"
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "upload-resume",
+    "description": "Resume an OpenCLI upload with fresh browser credentials",
+    "access": "write",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "OpenCLI upload task ID (from uploads)"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "upload-status",
+    "description": "View one OpenCLI upload task and its progress",
+    "access": "read",
+    "strategy": "local",
+    "browser": false,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "OpenCLI upload task ID (from uploads)"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js"
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "uploads",
+    "description": "List persistent OpenCLI upload tasks and acknowledged progress",
+    "access": "read",
+    "strategy": "local",
+    "browser": false,
+    "args": [
+      {
+        "name": "status",
+        "type": "str",
+        "required": false,
+        "help": "Filter by task status",
+        "choices": [
+          "queued",
+          "hashing",
+          "uploading",
+          "pausing",
+          "finalizing",
+          "paused",
+          "completed",
+          "failed",
+          "interrupted",
+          "uncertain"
+        ]
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 100,
+        "required": false,
+        "help": "Maximum results (1-10000; follows pagination)"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/commands.js",
+    "sourceFile": "baidu-netdisk/commands.js"
+  },
+  {
+    "site": "baidu-netdisk",
+    "name": "whoami",
+    "description": "Show the current Baidu Netdisk user, membership and storage quota",
+    "access": "read",
+    "domain": "pan.baidu.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "loggedIn",
+      "id",
+      "username",
+      "avatar",
+      "membership",
+      "totalBytes",
+      "usedBytes",
+      "freeBytes"
+    ],
+    "type": "js",
+    "modulePath": "baidu-netdisk/auth.js",
+    "sourceFile": "baidu-netdisk/auth.js",
+    "navigateBefore": false
+  },
+  {
     "site": "baidu-scholar",
     "name": "search",
     "description": "百度学术搜索",

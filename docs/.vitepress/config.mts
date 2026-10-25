@@ -53,6 +53,7 @@ export default defineConfig({
                 { text: 'Twitter / X', link: '/adapters/browser/twitter' },
                 { text: 'Reddit', link: '/adapters/browser/reddit' },
                 { text: 'Tieba', link: '/adapters/browser/tieba' },
+                { text: 'Baidu Netdisk', link: '/adapters/browser/baidu-netdisk' },
                 { text: 'Bilibili', link: '/adapters/browser/bilibili' },
                 { text: 'Zhihu', link: '/adapters/browser/zhihu' },
                 { text: 'Xiaohongshu', link: '/adapters/browser/xiaohongshu' },
