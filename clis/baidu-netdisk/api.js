@@ -4,28 +4,9 @@ import { ArgumentError, AuthRequiredError, CliError } from '@jackwener/opencli/e
 export const DOMAIN = 'pan.baidu.com';
 export const HOME = `https://${DOMAIN}/disk/main`;
 export const FILE_COLUMNS = ['name', 'path', 'type', 'size', 'modifiedAt', 'id'];
+export { fileName, positiveInt, remotePath } from '../_shared/drive-paths.js';
+
 const COMMON = { app_id: '250528', web: '1', channel: 'chunlei', clienttype: '0' };
-
-export function remotePath(value) {
-    if (typeof value !== 'string' || !value.startsWith('/') || /[\x00-\x1f\\]/.test(value)) {
-        throw new ArgumentError('Provide an absolute Baidu Netdisk path, e.g. /Documents');
-    }
-    if (value.split('/').some(part => part === '.' || part === '..')) throw new ArgumentError('Remote paths cannot contain . or .. segments');
-    return path.posix.normalize(value).replace(/\/$/, '') || '/';
-}
-
-export function fileName(value) {
-    if (typeof value !== 'string' || !value.trim() || value === '.' || value === '..' || /[\\/:*?"<>|\x00-\x1f]/.test(value)) {
-        throw new ArgumentError('Provide a filename without path separators or reserved characters');
-    }
-    return value;
-}
-
-export function positiveInt(value, label, max = 10000) {
-    const n = Number(value);
-    if (!Number.isSafeInteger(n) || n < 1 || n > max) throw new ArgumentError(`${label} must be between 1 and ${max}`);
-    return n;
-}
 
 export function checkPayload(data, label) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new CliError('BAIDU_RESPONSE', `${label}: invalid JSON response`);

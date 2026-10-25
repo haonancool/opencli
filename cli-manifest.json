@@ -32532,10 +32532,141 @@
   },
   {
     "site": "quark",
+    "name": "delete",
+    "description": "Delete a Quark file or directory to the recycle bin",
+    "access": "write",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote path or file ID"
+      },
+      {
+        "name": "recursive",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Allow deleting directories and their contents"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id",
+      "status"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
+    "name": "info",
+    "description": "View metadata for a Quark file or directory by path or ID",
+    "access": "read",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote path or file ID"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
+    "name": "list",
+    "description": "List Quark files with paths, metadata and pagination",
+    "access": "read",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "dir",
+        "type": "str",
+        "default": "/",
+        "required": false,
+        "help": "Absolute remote directory path"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 100,
+        "required": false,
+        "help": "Maximum results (1-10000)"
+      },
+      {
+        "name": "page",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Starting API page (100 entries per page)"
+      },
+      {
+        "name": "sort",
+        "type": "str",
+        "default": "name",
+        "required": false,
+        "help": "Sort field",
+        "choices": [
+          "name",
+          "time",
+          "size"
+        ]
+      },
+      {
+        "name": "desc",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Descending sort"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
     "name": "login",
     "description": "Open quark login and wait until the browser session is authenticated",
     "access": "write",
-    "domain": "quark.cn",
+    "domain": "pan.quark.cn",
     "strategy": "cookie",
     "browser": true,
     "args": [
@@ -32551,7 +32682,13 @@
       "status",
       "logged_in",
       "site",
-      "nickname"
+      "id",
+      "nickname",
+      "avatar",
+      "membership",
+      "totalBytes",
+      "usedBytes",
+      "freeBytes"
     ],
     "type": "js",
     "modulePath": "quark/auth.js",
@@ -32559,6 +32696,25 @@
     "navigateBefore": false,
     "siteSession": "persistent",
     "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "quark",
+    "name": "login-status",
+    "description": "Verify the current Quark browser login session",
+    "access": "read",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "loggedIn",
+      "status",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "quark/auth.js",
+    "sourceFile": "quark/auth.js",
+    "navigateBefore": false
   },
   {
     "site": "quark",
@@ -32607,7 +32763,7 @@
   {
     "site": "quark",
     "name": "mkdir",
-    "description": "Create a folder in your Quark Drive",
+    "description": "Create a Quark folder by name or absolute path",
     "access": "write",
     "domain": "pan.quark.cn",
     "strategy": "cookie",
@@ -32618,26 +32774,62 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "Folder name"
+        "help": "Folder name or absolute remote path"
       },
       {
         "name": "parent",
         "type": "str",
         "required": false,
-        "help": "Parent folder path (resolved by name)"
+        "help": "Parent folder path"
       },
       {
         "name": "parent-fid",
         "type": "str",
         "required": false,
-        "help": "Parent folder fid (use directly)"
+        "help": "Parent folder ID"
       }
     ],
     "defaultFormat": "json",
     "type": "js",
     "modulePath": "quark/mkdir.js",
     "sourceFile": "quark/mkdir.js",
-    "navigateBefore": "https://pan.quark.cn"
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
+    "name": "move",
+    "description": "Move a Quark file or directory by path or ID, without overwriting",
+    "access": "write",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "path",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Absolute remote path or file ID"
+      },
+      {
+        "name": "to",
+        "type": "str",
+        "required": true,
+        "help": "Existing destination directory path"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
   },
   {
     "site": "quark",
@@ -32697,7 +32889,7 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "File ID to rename"
+        "help": "File ID or absolute remote path to rename"
       },
       {
         "name": "name",
@@ -32710,7 +32902,7 @@
     "type": "js",
     "modulePath": "quark/rename.js",
     "sourceFile": "quark/rename.js",
-    "navigateBefore": "https://pan.quark.cn"
+    "navigateBefore": false
   },
   {
     "site": "quark",
@@ -32802,6 +32994,57 @@
   },
   {
     "site": "quark",
+    "name": "search",
+    "description": "Search Quark filenames recursively under a directory",
+    "access": "read",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Filename keyword"
+      },
+      {
+        "name": "dir",
+        "type": "str",
+        "default": "/",
+        "required": false,
+        "help": "Absolute remote directory path"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 100,
+        "required": false,
+        "help": "Maximum results (1-10000)"
+      },
+      {
+        "name": "page",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Starting API page (100 entries per page)"
+      }
+    ],
+    "columns": [
+      "name",
+      "path",
+      "type",
+      "size",
+      "modifiedAt",
+      "id"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
     "name": "share-tree",
     "description": "Get directory tree from Quark Drive share link as nested JSON",
     "access": "read",
@@ -32839,17 +33082,220 @@
   },
   {
     "site": "quark",
+    "name": "upload",
+    "description": "Start a persistent background Quark file upload",
+    "access": "write",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "file",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Local regular file path"
+      },
+      {
+        "name": "dir",
+        "type": "str",
+        "default": "/",
+        "required": false,
+        "help": "Absolute remote directory path"
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "required": false,
+        "help": "Remote basename"
+      },
+      {
+        "name": "paused",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Create a paused task"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
+    "name": "upload-pause",
+    "description": "Pause an OpenCLI Quark upload and abort its in-flight part",
+    "access": "write",
+    "strategy": "local",
+    "browser": false,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "OpenCLI Quark upload task ID"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js"
+  },
+  {
+    "site": "quark",
+    "name": "upload-resume",
+    "description": "Resume a Quark upload with fresh browser login",
+    "access": "write",
+    "domain": "pan.quark.cn",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "OpenCLI Quark upload task ID"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "quark",
+    "name": "upload-status",
+    "description": "View a Quark upload task and its progress",
+    "access": "read",
+    "strategy": "local",
+    "browser": false,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "OpenCLI Quark upload task ID"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js"
+  },
+  {
+    "site": "quark",
+    "name": "uploads",
+    "description": "List OpenCLI Quark upload tasks and acknowledged progress",
+    "access": "read",
+    "strategy": "local",
+    "browser": false,
+    "args": [
+      {
+        "name": "status",
+        "type": "str",
+        "required": false,
+        "help": "Task status filter",
+        "choices": [
+          "queued",
+          "hashing",
+          "uploading",
+          "pausing",
+          "finalizing",
+          "paused",
+          "completed",
+          "failed",
+          "interrupted",
+          "uncertain"
+        ]
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 100,
+        "required": false,
+        "help": "Maximum results (1-10000)"
+      }
+    ],
+    "columns": [
+      "id",
+      "name",
+      "remotePath",
+      "status",
+      "progress",
+      "uploadedBytes",
+      "size",
+      "speed",
+      "error"
+    ],
+    "type": "js",
+    "modulePath": "quark/commands.js",
+    "sourceFile": "quark/commands.js"
+  },
+  {
+    "site": "quark",
     "name": "whoami",
     "description": "Show the current logged-in quark account",
     "access": "read",
-    "domain": "quark.cn",
+    "domain": "pan.quark.cn",
     "strategy": "cookie",
     "browser": true,
     "args": [],
     "columns": [
       "logged_in",
       "site",
-      "nickname"
+      "id",
+      "nickname",
+      "avatar",
+      "membership",
+      "totalBytes",
+      "usedBytes",
+      "freeBytes"
     ],
     "type": "js",
     "modulePath": "quark/auth.js",
