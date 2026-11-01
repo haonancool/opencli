@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto';
 import { CliError } from '@jackwener/opencli/errors';
 import { QuarkClient } from './drive-api.js';
-import { CHUNK_SIZE } from './tasks.js';
 
 const USER_AGENT = 'aliyun-sdk-js/1.0.0';
 const digest = (bytes, encoding) => createHash('md5').update(bytes).digest(encoding);
+
+export function validatePartSize(partSize, size) {
+    // SHA-1 contexts require complete 64-byte blocks. Bound allocation even if
+    // upstream metadata or a saved checkpoint is malformed.
+    if (!Number.isSafeInteger(partSize) || partSize < 64 || partSize > 64 * 1024 * 1024 || partSize % 64 !== 0 || Math.ceil(size / partSize) > 10000) {
+        throw new CliError('QUARK_RESPONSE', 'Invalid upload part size (expected a 64-byte-aligned size up to 64 MiB and at most 10,000 parts)');
+    }
+    return partSize;
+}
 
 export class QuarkUploadClient extends QuarkClient {
     async prepare(task, md5, sha1) {
@@ -16,10 +24,10 @@ export class QuarkUploadClient extends QuarkClient {
         const data = result.data;
         if (typeof data.fid !== 'string' || !/^[a-f\d]{32}$/i.test(data.fid) || typeof data.finish !== 'boolean') throw new CliError('QUARK_RESPONSE', 'Invalid upload preparation response');
         if (data.finish) return { fid: data.fid, instant: true };
-        if (result.metadata?.part_size !== CHUNK_SIZE) throw new CliError('QUARK_RESPONSE', 'Unsupported server part size (expected 4 MiB)');
+        const partSize = validatePartSize(result.metadata?.part_size, task.size);
         for (const key of ['task_id', 'upload_id', 'obj_key', 'bucket', 'auth_info']) if (typeof data[key] !== 'string' || !data[key]) throw new CliError('QUARK_RESPONSE', 'Missing upload handle');
         if (!/^[a-z\d-]+$/.test(data.bucket) || !/^[a-z\d/_-]+$/i.test(data.obj_key) || !data.callback || typeof data.callback !== 'object') throw new CliError('QUARK_RESPONSE', 'Invalid upload destination');
-        return { serverTaskId: data.task_id, uploadId: data.upload_id, objKey: data.obj_key, bucket: data.bucket, authInfo: data.auth_info, callback: data.callback, fid: data.fid, instant: false };
+        return { serverTaskId: data.task_id, uploadId: data.upload_id, objKey: data.obj_key, bucket: data.bucket, authInfo: data.auth_info, callback: data.callback, fid: data.fid, partSize, instant: false };
     }
 
     async signedRequest(task, method, query, bytes, extraHeaders = {}, signal) {

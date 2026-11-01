@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { QuarkUploadClient } from './upload-api.js';
+import { QuarkUploadClient, validatePartSize } from './upload-api.js';
 import { runUpload } from './upload-engine.js';
 import { CHUNK_SIZE, createTask, inspectLocalFile, pauseTask, readTask, withTask } from './tasks.js';
 const ID = 'a'.repeat(32), auth = { account: 'test-account', cookie: 'synthetic-cookie' };
@@ -28,7 +28,7 @@ function transport({ part, complete, instant = false, partSize = CHUNK_SIZE } = 
             expect(options.headers.authorization).toBe('OSS synthetic-signature');
             if (options.method === 'PUT') {
                 const index = Number(url.searchParams.get('partNumber')) - 1;
-                if (index > 0) expect(JSON.parse(Buffer.from(options.headers['X-Oss-Hash-Ctx'], 'base64').toString()).Nl).toBe(String(index * CHUNK_SIZE * 8));
+                if (index > 0) expect(JSON.parse(Buffer.from(options.headers['X-Oss-Hash-Ctx'], 'base64').toString()).Nl).toBe(String((index * partSize * 8) >>> 0));
                 if (part) return part(index, options.body, options.signal);
                 return new Response('', { headers: { etag: `"${digest(options.body).toUpperCase()}"` } });
             }
@@ -71,6 +71,32 @@ describe('Quark multipart worker', () => {
         expect(parts.map(([, options]) => options.body.length)).toEqual([CHUNK_SIZE, CHUNK_SIZE, 17]);
         expect(new URL(fetcher.mock.calls.at(-1)[0]).pathname).toBe('/1/clouddrive/file/info');
     });
+    it('persists negotiated 20 MiB boundaries and resumes them without another precreate', async () => {
+        const partSize = 20 * 1024 * 1024;
+        const content = Buffer.concat([Buffer.alloc(partSize, 43), Buffer.alloc(partSize, 44), Buffer.alloc(17, 45)]);
+        fs.writeFileSync(task.localPath, content);
+        await withTask(dir, task.id, t => Object.assign(t, inspectLocalFile(task.localPath)));
+        task = readTask(dir, task.id);
+        let paused = false, pause;
+        const { client, fetcher } = transport({ partSize, part: async (index, bytes, signal) => {
+            expect(bytes.equals(content.subarray(index * partSize, (index + 1) * partSize))).toBe(true);
+            if (index === 1 && !paused) {
+                paused = true; pause = pauseTask(task.id, dir);
+                await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
+                signal.throwIfAborted();
+            }
+            return new Response('', { headers: { etag: digest(bytes).toUpperCase() } });
+        } });
+        await runUpload(task.id, dir, task.runId, auth, client); await pause;
+        expect(readTask(dir, task.id)).toMatchObject({ status: 'paused', partSize, uploadedBytes: partSize, completedParts: [0] });
+        await withTask(dir, task.id, t => { t.status = 'queued'; t.pid = process.pid; t.runId = randomUUID(); });
+        await runUpload(task.id, dir, readTask(dir, task.id).runId, auth, client);
+        expect(readTask(dir, task.id)).toMatchObject({ status: 'completed', uploadedBytes: task.size, completedParts: [0, 1, 2] });
+        expect(fetcher.mock.calls.filter(([url]) => url.includes('/upload/pre?'))).toHaveLength(1);
+        const puts = fetcher.mock.calls.filter(([url, options]) => url.includes('.pds.quark.cn') && options.method === 'PUT');
+        expect(puts.map(([url]) => new URL(url).searchParams.get('partNumber'))).toEqual(['1', '2', '2', '3']);
+        expect(puts.map(([, options]) => options.body.length)).toEqual([partSize, partSize, partSize, 17]);
+    });
     it('aborts an in-flight part, retains acknowledgements and resumes without a second precreate', async () => {
         let aborted = false, pause;
         const { client, fetcher } = transport({ part: async (index, bytes, signal) => {
@@ -83,6 +109,8 @@ describe('Quark multipart worker', () => {
         } });
         await runUpload(task.id, dir, task.runId, auth, client); await pause;
         expect(readTask(dir, task.id)).toMatchObject({ status: 'paused', uploadedBytes: CHUNK_SIZE, completedParts: [0] });
+        // Tasks from before negotiated sizes were stored have no partSize.
+        await withTask(dir, task.id, t => { delete t.partSize; });
         await withTask(dir, task.id, task => { task.status = 'queued'; task.pid = process.pid; task.runId = randomUUID(); });
         await runUpload(task.id, dir, readTask(dir, task.id).runId, auth, client);
         expect(readTask(dir, task.id).status).toBe('completed');
@@ -102,10 +130,16 @@ describe('Quark multipart worker', () => {
         expect(readTask(dir, task.id).status).toBe('uncertain');
         expect(fetcher.mock.calls.filter(([url, options]) => url.includes('.pds.quark.cn') && options.method === 'POST')).toHaveLength(1);
     });
-    it('refuses changed files, checksums and unsupported part sizes', async () => {
+    it('refuses incorrect storage checksums', async () => {
         const { client } = transport({ part: () => new Response('', { headers: { etag: 'wrong' } }) });
         await runUpload(task.id, dir, task.runId, auth, client);
         expect(readTask(dir, task.id)).toMatchObject({ status: 'failed', uploadedBytes: 0 });
+    });
+    it.each([undefined, null, '20971520', 0, -64, 123, 64 * 1024 * 1024 + 64])('rejects unsafe negotiated part size %s', partSize => {
+        expect(() => validatePartSize(partSize, task.size)).toThrow(/part size/);
+    });
+    it('rejects part counts beyond the storage limit', () => {
+        expect(() => validatePartSize(CHUNK_SIZE, CHUNK_SIZE * 10000 + 1)).toThrow(/10,000/);
     });
     it('does not accept a malformed server upload configuration', async () => {
         const { client } = transport({ partSize: 123 });

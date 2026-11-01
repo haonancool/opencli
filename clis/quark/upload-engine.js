@@ -2,16 +2,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { CliError } from '@jackwener/opencli/errors';
-import { QuarkUploadClient } from './upload-api.js';
+import { QuarkUploadClient, validatePartSize } from './upload-api.js';
 import { Sha1Context } from './sha1-context.js';
 import { CHUNK_SIZE, assertUnchanged, readTask, withTask } from './tasks.js';
 
 const md5 = bytes => createHash('md5').update(bytes).digest('hex');
-async function readPart(handle, size, index) {
-    const length = Math.min(CHUNK_SIZE, size - index * CHUNK_SIZE), bytes = Buffer.alloc(length);
+async function readPart(handle, size, index, partSize = CHUNK_SIZE) {
+    const length = Math.min(partSize, size - index * partSize), bytes = Buffer.alloc(length);
     let offset = 0;
     while (offset < length) {
-        const result = await handle.read(bytes, offset, length - offset, index * CHUNK_SIZE + offset);
+        const result = await handle.read(bytes, offset, length - offset, index * partSize + offset);
         if (!result.bytesRead) throw new CliError('UPLOAD_FILE_CHANGED', 'Local file ended before its expected size');
         offset += result.bytesRead;
     }
@@ -46,37 +46,47 @@ export async function runUpload(id, dir, runId, auth, client = new QuarkUploadCl
         assertUnchanged(task);
         handle = await fs.open(task.localPath, 'r');
         await edit(task => { if (task.status !== 'pausing') task.status = 'hashing'; });
-        const hashes = [], contexts = [], context = new Sha1Context(), wholeMd5 = createHash('md5'), sha1 = createHash('sha1');
-        for (let i = 0; i < Math.ceil(task.size / CHUNK_SIZE); i++) {
-            check(); const bytes = await readPart(handle, task.size, i);
-            contexts.push(i > 0 ? context.encode() : null);
-            if (bytes.length === CHUNK_SIZE) context.update(bytes);
-            hashes.push(md5(bytes)); wholeMd5.update(bytes); sha1.update(bytes);
-            if (task.hashes.length && task.hashes[i] !== hashes[i]) throw new CliError('UPLOAD_FILE_CHANGED', 'Local file checksum changed; start a new task');
-        }
-        assertUnchanged(task);
-        await edit(task => { task.hashes = hashes; task.partContexts = contexts; });
-        task = check();
         const parent = await client.assertDirectory(path.posix.dirname(task.remotePath));
         if (parent.fid !== task.parentId) throw new CliError('UPLOAD_DESTINATION_CHANGED', 'The destination directory changed; start a new task');
         await client.assertAbsent(task.remotePath);
         check();
         if (!task.uploadId && !task.instant) {
+            // Whole-file digests are needed before the server negotiates the
+            // part size. Do not create per-part checkpoints with guessed bounds.
+            const wholeMd5 = createHash('md5'), sha1 = createHash('sha1');
+            for (let i = 0; i < Math.ceil(task.size / CHUNK_SIZE); i++) {
+                check(); const bytes = await readPart(handle, task.size, i);
+                wholeMd5.update(bytes); sha1.update(bytes);
+            }
+            assertUnchanged(task);
             // Precreate can instantly materialize a deduplicated file. Treat its
             // uncertainty as a write; use a task-unique staging name, never the final name.
             await finalize();
             const prepared = await client.prepare(task, wholeMd5.digest('hex'), sha1.digest('hex'));
-            await edit(task => { Object.assign(task, prepared); task.etags = []; task.status = prepared.instant ? 'finalizing' : 'uploading'; });
+            await edit(task => { Object.assign(task, prepared); task.etags = []; task.hashes = []; task.status = prepared.instant ? 'finalizing' : 'hashing'; });
             committing = prepared.instant;
         }
         task = check();
         if (!task.instant) {
+            // Older checkpoints predate negotiation and always used 4 MiB.
+            const partSize = validatePartSize(task.partSize === undefined ? CHUNK_SIZE : task.partSize, task.size);
+            const count = Math.ceil(task.size / partSize), hashes = [], contexts = [], context = new Sha1Context();
+            if (task.hashes.length && task.hashes.length !== count) throw new CliError('UPLOAD_STATE', 'Saved checksums do not match the upload part size');
+            for (let i = 0; i < count; i++) {
+                check(); const bytes = await readPart(handle, task.size, i, partSize);
+                contexts.push(i > 0 ? context.encode() : null);
+                if (bytes.length === partSize) context.update(bytes);
+                hashes.push(md5(bytes));
+                if (task.hashes.length && task.hashes[i] !== hashes[i]) throw new CliError('UPLOAD_FILE_CHANGED', 'Local file checksum changed; start a new task');
+            }
+            assertUnchanged(task);
+            await edit(task => { task.partSize = partSize; task.hashes = hashes; task.partContexts = contexts; });
             await edit(task => { if (task.status !== 'pausing') task.status = 'uploading'; });
             for (let i = 0; i < hashes.length; i++) {
                 task = check();
                 if (task.completedParts.includes(i)) continue;
                 assertUnchanged(task);
-                const bytes = await readPart(handle, task.size, i);
+                const bytes = await readPart(handle, task.size, i, partSize);
                 if (md5(bytes) !== hashes[i]) throw new CliError('UPLOAD_FILE_CHANGED', 'Local file changed during upload');
                 const start = Date.now(), etag = await client.uploadPart(task, i, bytes, controller.signal);
                 await edit(task => { task.etags[i] = etag; task.completedParts.push(i); task.uploadedBytes += bytes.length; task.speed = Math.round(bytes.length / Math.max(0.001, (Date.now() - start) / 1000)); });
