@@ -1,16 +1,18 @@
 import { cli, Strategy } from '@jackwener/opencli/registry';
-import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
+import { ArgumentError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
 import { log } from '@jackwener/opencli/logger';
 import { isRecord } from '@jackwener/opencli/utils';
 import {
-    classifyBrowserAuthFailure,
+    classifyXueqiuAccessFailure,
     classifyStatusCommentsResponse,
+    describeXueqiuAccessFailure,
     envelopeTextFromJson,
     fetchXueqiuEnvelope,
     getStatusCommentItems,
     normalizeIdentifier,
     statusUrl,
     stripTags,
+    throwXueqiuAccessFailure,
     toFiniteCount,
     toIsoTimestamp,
 } from './utils.js';
@@ -20,10 +22,6 @@ const XUEQIU_STATUS_ID_PATTERN = /^\d{1,15}$/;
 const COMMENT_PAGE_SIZE = 20;
 const COMMENT_MAX_PAGES = 40;
 const COMMENT_LIMIT_MAX = COMMENT_PAGE_SIZE * COMMENT_MAX_PAGES;
-const CHILD_COMMENT_MAX_PAGES = 20;
-// Back-to-back comment requests trip xueqiu's EO_Bot_Ssid JS challenge within a few pages.
-const COMMENT_REQUEST_DELAY_MS = 600;
-const COMMENT_MAX_RECOVERIES = 5;
 
 /**
  * Parse a status id or a post URL like `https://xueqiu.com/9089343523/99380989`.
@@ -56,9 +54,9 @@ export function parseStatusInput(raw) {
 export function classifyStatusDetailResponse(response) {
     const jsonRecord = isRecord(response.json) ? response.json : null;
     const envelopeText = envelopeTextFromJson(jsonRecord);
-    const authFailure = classifyBrowserAuthFailure(response, envelopeText);
-    if (authFailure)
-        return authFailure;
+    const accessFailure = classifyXueqiuAccessFailure(response, envelopeText);
+    if (accessFailure)
+        return accessFailure;
     if (jsonRecord && envelopeText && !normalizeIdentifier(jsonRecord.id)) {
         if (/页面不存在|status not found|does not exist|not found/.test(envelopeText)
             || jsonRecord.error_code === '20210') {
@@ -104,7 +102,7 @@ export function normalizeStatusDetail(item) {
  * Normalize one raw comment item into the comment output row.
  *
  * @param item Raw comment object from `statuses/v3/comments.json`.
- * @param root Root comment `{ id, author }` when `item` is a nested reply.
+ * @param root Top-level comment containing this reply, if any.
  * @returns Public comment row (`type=comment`).
  */
 export function normalizeCommentItem(item, root = null) {
@@ -117,7 +115,7 @@ export function normalizeCommentItem(item, root = null) {
     return {
         type: 'comment',
         id,
-        parent_id: root?.id || null,
+        parent_id: root?.id ?? null,
         author: String(item.user?.screen_name ?? ''),
         text: stripTags(item.text),
         reply_to: replyTo,
@@ -129,176 +127,151 @@ export function normalizeCommentItem(item, root = null) {
     };
 }
 
-/**
- * Extract the nested replies of one root comment from a `child_type=2` page.
- *
- * The child endpoint echoes the root comment in `comments[]` and pages its
- * replies through that root's `child_comments`.
- *
- * @param json Raw parsed JSON payload from browser fetch.
- * @param commentId Root comment id the page was requested for.
- * @returns Child comment items when the response shape is usable, otherwise null.
- */
-export function getChildCommentItems(json, commentId) {
-    const comments = getStatusCommentItems(json);
-    if (!comments)
-        return null;
-    const root = comments.find(item => normalizeIdentifier(item?.id) === commentId) ?? comments[0];
-    if (!root)
-        return [];
-    return Array.isArray(root.child_comments) ? root.child_comments : [];
-}
-
-function commentFailureReason(kind) {
-    if (kind === 'auth' || kind === 'anti-bot')
-        return 'auth failure';
-    if (kind === 'unknown')
-        return 'unknown request failure';
-    return 'unexpected response shape';
-}
-
-function delay(ms) {
-    return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+function commentFailureReason(kind, response) {
+    const accessReason = describeXueqiuAccessFailure(kind);
+    if (accessReason)
+        return accessReason;
+    if (response.status === 0)
+        return 'browser fetch failed before receiving an HTTP response';
+    const mime = response.contentType.split(';', 1)[0].trim().toLowerCase();
+    const reason = mime === 'text/html' ? 'unexpected HTML response' : 'unexpected response shape';
+    return `${reason} (HTTP ${response.status}${mime ? `, ${mime}` : ''})`;
 }
 
 /**
- * Load every nested reply under one root comment.
+ * Paginate through the top-level comments until the requested limit, exhaustion,
+ * or a safety cap is reached.
  *
- * Uses the embedded `child_comments` preview when it already covers
- * `comment_reply_count`, otherwise paginates the `child_type=2` endpoint.
+ * The site's public comment stream is a filtered subset of `reply_count`
+ * (commonly capped around 150). Exhaustion is `next_max_id === -1` or an
+ * empty page, not `reply_count`.
  *
- * @returns `{ items }` on success or `{ items, failure }` when a page failed.
+ * @param options Pagination inputs and a page-fetch callback.
+ * @returns Deduplicated raw comments and whether a failed request stopped pagination.
  */
-async function collectChildItems(rootItem, rootId, options, request) {
-    const expected = toFiniteCount(rootItem.comment_reply_count);
-    if (expected <= 0)
-        return { items: [] };
-    const preview = Array.isArray(rootItem.child_comments) ? rootItem.child_comments : [];
-    if (preview.length >= expected || !options.fetchChildPage)
-        return { items: preview };
-    const items = [];
+export async function collectCommentRows(options) {
+    const warn = options.warn ?? log.warn;
+    const comments = [];
     const seenIds = new Set();
-    let maxId = -1;
-    for (let pageNumber = 1; pageNumber <= options.childMaxPages; pageNumber += 1) {
-        const response = await request(() => options.fetchChildPage(rootId, maxId, options.pageSize));
+    let maxId = '-1';
+    for (let requestNumber = 1; requestNumber <= options.maxPages; requestNumber += 1) {
+        const response = await options.fetchPage(maxId, options.pageSize);
         const classified = classifyStatusCommentsResponse(response);
-        const childItems = classified.kind === 'ok' ? getChildCommentItems(response.json, rootId) : null;
-        if (!childItems)
-            return { items, failure: classified.kind === 'ok' ? 'incompatible' : classified.kind };
-        let advanced = false;
-        for (const item of childItems) {
+        if (classified.kind !== 'ok') {
+            if (requestNumber === 1 && !describeXueqiuAccessFailure(classified.kind)) {
+                throw new CommandExecutionError(`Unexpected response while loading xueqiu comments for post ${options.statusId}: ${commentFailureReason(classified.kind, response)}`);
+            }
+            warn(`xueqiu post ${options.statusId} comment pagination stopped after request ${requestNumber}, `
+                + `collected ${comments.length}/${options.limit} items, `
+                + `reason: ${commentFailureReason(classified.kind, response)}`);
+            return { comments, interrupted: true };
+        }
+        const rawItems = getStatusCommentItems(response.json) ?? [];
+        const previousCount = comments.length;
+        for (const item of rawItems) {
             const id = normalizeIdentifier(item?.id);
             if (!id || seenIds.has(id))
                 continue;
             seenIds.add(id);
-            items.push(item);
-            advanced = true;
+            comments.push(item);
+            if (comments.length >= options.limit)
+                return { comments, interrupted: false };
         }
-        const nextMaxId = isRecord(response.json) ? response.json.next_max_id : null;
-        if (!advanced || nextMaxId == null || nextMaxId === -1 || nextMaxId === maxId)
-            break;
-        maxId = nextMaxId;
-    }
-    return { items };
-}
-
-/**
- * Paginate through the v3 comments API until the requested limit, exhaustion,
- * or a safety cap is reached. Each root comment is followed by its nested
- * replies (楼中楼), which the root stream only previews.
- *
- * The site's public root-comment stream is a filtered subset of `reply_count`
- * (commonly capped around 150). Exhaustion is `next_max_id === -1` or an
- * empty page, not `reply_count`.
- *
- * @param options Pagination inputs and page-fetch callbacks.
- * @returns Deduplicated normalized comment rows, possibly partial with a warning.
- */
-export async function collectCommentRows(options) {
-    const warn = options.warn ?? log.warn;
-    const requestDelayMs = options.requestDelayMs ?? 0;
-    const childOptions = { ...options, childMaxPages: options.childMaxPages ?? options.maxPages };
-    let requestCount = 0;
-    let recoveriesLeft = options.recover ? (options.maxRecoveries ?? 0) : 0;
-    const request = async (fetch) => {
-        if (requestCount > 0)
-            await delay(requestDelayMs);
-        requestCount += 1;
-        let response = await fetch();
-        // A mid-run EO_Bot_Ssid challenge clears once the browser reloads a xueqiu page.
-        while (recoveriesLeft > 0 && classifyStatusCommentsResponse(response).kind === 'anti-bot') {
-            recoveriesLeft -= 1;
-            await options.recover();
-            response = await fetch();
-        }
-        return response;
-    };
-    const rows = [];
-    const seenIds = new Set();
-    const pushRow = (row) => {
-        if (!row.id || seenIds.has(row.id))
-            return false;
-        seenIds.add(row.id);
-        rows.push(row);
-        return true;
-    };
-    let maxId = -1;
-    for (let requestNumber = 1; requestNumber <= options.maxPages; requestNumber += 1) {
-        const response = await request(() => options.fetchPage(maxId, options.pageSize));
-        const classified = classifyStatusCommentsResponse(response);
-        if (classified.kind !== 'ok') {
-            if (requestNumber === 1) {
-                if (classified.kind === 'auth' || classified.kind === 'anti-bot') {
-                    throw new AuthRequiredError('xueqiu.com', 'Post comments require login or challenge clearance');
-                }
-                throw new CommandExecutionError(`Unexpected response while loading xueqiu comments for post ${options.statusId}`, 'Run the command again with --verbose to inspect the raw site response.');
-            }
-            warn(`xueqiu post comment pagination stopped after request ${requestNumber}, `
-                + `collected ${rows.length}/${options.limit} items, `
-                + `reason: ${commentFailureReason(classified.kind)}`);
-            break;
-        }
-        const rawItems = (getStatusCommentItems(response.json) ?? [])
-            .filter(item => normalizeIdentifier(item?.id));
         if (rawItems.length === 0) {
             break;
         }
-        let advanced = false;
-        for (const rawItem of rawItems) {
-            const rootRow = normalizeCommentItem(rawItem);
-            if (!pushRow(rootRow))
-                continue;
-            advanced = true;
-            if (rows.length >= options.limit)
-                return rows;
-            const children = await collectChildItems(rawItem, rootRow.id, childOptions, request);
-            for (const childItem of children.items) {
-                pushRow(normalizeCommentItem(childItem, rootRow));
-                if (rows.length >= options.limit)
-                    return rows;
-            }
-            if (children.failure) {
-                warn(`xueqiu post comment pagination stopped while loading replies to comment ${rootRow.id}, `
-                    + `collected ${rows.length}/${options.limit} items, `
-                    + `reason: ${commentFailureReason(children.failure)}`);
-                return rows;
-            }
-        }
-        const nextMaxId = isRecord(response.json) ? response.json.next_max_id : null;
-        if (nextMaxId == null || nextMaxId === -1 || nextMaxId === maxId) {
+        const nextMaxId = normalizeIdentifier(response.json.next_max_id);
+        if (!nextMaxId || nextMaxId === '-1' || nextMaxId === maxId) {
             break;
         }
-        if (!advanced) {
+        if (comments.length === previousCount) {
             warn(`xueqiu post comment pagination stopped after request ${requestNumber}, `
-                + `collected ${rows.length}/${options.limit} items, `
+                + `collected ${comments.length}/${options.limit} items, `
                 + `reason: pagination did not advance`);
             break;
         }
         maxId = nextMaxId;
-        if (requestNumber === options.maxPages && rows.length < options.limit) {
+        if (requestNumber === options.maxPages) {
             warn(`xueqiu post comment pagination stopped after request ${requestNumber}, `
-                + `collected ${rows.length}/${options.limit} items, `
+                + `collected ${comments.length}/${options.limit} items, `
                 + `reason: reached safety cap`);
+        }
+    }
+    return { comments, interrupted: false };
+}
+
+export function getChildCommentItems(json, rootId) {
+    const comments = getStatusCommentItems(json);
+    if (!comments || comments.length === 0)
+        return comments;
+    const root = comments.find(item => normalizeIdentifier(item?.id) === rootId);
+    return Array.isArray(root?.child_comments) ? root.child_comments : null;
+}
+
+function addCommentRows(byId, items, root) {
+    for (const item of items) {
+        const id = normalizeIdentifier(item?.id);
+        if (id && !byId.has(id))
+            byId.set(id, normalizeCommentItem(item, root));
+    }
+}
+
+async function fetchThreadReplies(page, statusId, root) {
+    const replies = new Map();
+    const seenCursors = new Set();
+    let cursor = '-1';
+    do {
+        seenCursors.add(cursor);
+        const query = new URLSearchParams({ id: statusId, comment_id: root.id, type: '4', child_type: '2', max_id: cursor });
+        const response = await fetchXueqiuEnvelope(page, `/statuses/v3/comments.json?${query}`);
+        const { kind } = classifyStatusCommentsResponse(response);
+        if (kind !== 'ok') {
+            return { replies, failure: commentFailureReason(kind, response) };
+        }
+        const children = getChildCommentItems(response.json, root.id);
+        if (children === null) {
+            return { replies, failure: 'response did not include the requested comment thread' };
+        }
+        const previousCount = replies.size;
+        addCommentRows(replies, children, root);
+        const nextCursor = normalizeIdentifier(response.json.next_max_id);
+        if (nextCursor === '-1')
+            return { replies };
+        if (!nextCursor || seenCursors.has(nextCursor) || replies.size === previousCount) {
+            return { replies, failure: 'pagination did not advance' };
+        }
+        cursor = nextCursor;
+    } while (true);
+}
+
+async function buildCommentRows(page, statusId, { comments, interrupted }) {
+    const rows = [];
+    const seenIds = new Set(comments.map(item => normalizeIdentifier(item.id)));
+    let fetchRemainingReplies = !interrupted;
+    for (const item of comments) {
+        const row = normalizeCommentItem(item);
+        rows.push(row);
+        let replies = new Map();
+        if (Array.isArray(item.child_comments))
+            addCommentRows(replies, item.child_comments, row);
+        if (fetchRemainingReplies && replies.size < row.replies) {
+            const thread = await fetchThreadReplies(page, statusId, row);
+            for (const [id, child] of replies) {
+                if (!thread.replies.has(id))
+                    thread.replies.set(id, child);
+            }
+            replies = thread.replies;
+            if (thread.failure) {
+                log.warn(`xueqiu post ${statusId} nested replies stopped at comment ${row.id}, `
+                    + `collected ${replies.size}/${row.replies} replies in this thread, reason: ${thread.failure}`);
+                fetchRemainingReplies = false;
+            }
+        }
+        for (const [id, child] of replies) {
+            if (seenIds.has(id))
+                continue;
+            seenIds.add(id);
+            rows.push(child);
         }
     }
     return rows;
@@ -308,7 +281,7 @@ cli({
     site: 'xueqiu',
     name: 'post',
     access: 'read',
-    description: '获取单条雪球帖子正文和评论',
+    description: '获取单条雪球帖子正文、评论和楼中楼回复',
     domain: 'xueqiu.com',
     strategy: Strategy.COOKIE,
     browser: true,
@@ -320,8 +293,8 @@ cli({
             required: true,
             help: '帖子 status_id 或 URL(https://xueqiu.com/<user_id>/<status_id>)',
         },
-        { name: 'comment_limit', type: 'int', default: COMMENT_LIMIT_MAX, help: `Comments to return (max ${COMMENT_LIMIT_MAX}, 0 = post only)` },
-        { name: 'timeout', type: 'int', default: 300, help: 'Max seconds for the overall command (default: 300 — paced comment and reply pagination)' },
+        { name: 'comment_limit', type: 'int', default: COMMENT_LIMIT_MAX, help: `Top-level comments to return with their replies (max ${COMMENT_LIMIT_MAX}, 0 = post only)` },
+        { name: 'timeout', type: 'int', default: 900, help: 'Maximum seconds for the overall command' },
     ],
     columns: ['type', 'id', 'parent_id', 'author', 'text', 'reply_to', 'likes', 'replies', 'retweets', 'created_at', 'url'],
     func: async (page, args) => {
@@ -336,9 +309,7 @@ cli({
         await page.goto('https://xueqiu.com');
         const detailResponse = await fetchXueqiuEnvelope(page, `/statuses/show.json?id=${encodeURIComponent(statusId)}`);
         const classified = classifyStatusDetailResponse(detailResponse);
-        if (classified.kind === 'auth' || classified.kind === 'anti-bot') {
-            throw new AuthRequiredError('xueqiu.com', 'Post detail requires login or challenge clearance');
-        }
+        throwXueqiuAccessFailure(classified.kind, `Loading xueqiu post ${statusId}`);
         if (classified.kind === 'not-found') {
             throw new EmptyResultError(`xueqiu/post ${statusId}`, `xueqiu post ${statusId} does not exist`);
         }
@@ -352,19 +323,15 @@ cli({
         if (commentLimit === 0) {
             return [postRow];
         }
-        const comments = await collectCommentRows({
+        const collected = await collectCommentRows({
             statusId,
             limit: commentLimit,
-            pageSize: COMMENT_PAGE_SIZE,
+            pageSize: Math.min(commentLimit, COMMENT_PAGE_SIZE),
             maxPages: COMMENT_MAX_PAGES,
-            childMaxPages: CHILD_COMMENT_MAX_PAGES,
-            requestDelayMs: COMMENT_REQUEST_DELAY_MS,
-            maxRecoveries: COMMENT_MAX_RECOVERIES,
-            recover: () => page.goto('https://xueqiu.com'),
-            fetchPage: (maxId, pageSize) => fetchXueqiuEnvelope(page, `/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&type=4&size=${pageSize}&max_id=${maxId}`),
-            fetchChildPage: (commentId, maxId, pageSize) => fetchXueqiuEnvelope(page, `/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&comment_id=${encodeURIComponent(commentId)}&type=4&child_type=2&size=${pageSize}&max_id=${maxId}`),
+            fetchPage: (maxId, pageSize) => fetchXueqiuEnvelope(page, `/statuses/v3/comments.json?id=${encodeURIComponent(statusId)}&type=4&size=${pageSize}&max_id=${encodeURIComponent(maxId)}`),
             warn: log.warn,
         });
+        const comments = await buildCommentRows(page, statusId, collected);
         return [postRow, ...comments];
     },
 });

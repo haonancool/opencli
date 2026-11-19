@@ -47964,7 +47964,7 @@
   {
     "site": "xueqiu",
     "name": "post",
-    "description": "获取单条雪球帖子正文和评论",
+    "description": "获取单条雪球帖子正文、评论和楼中楼回复",
     "access": "read",
     "domain": "xueqiu.com",
     "strategy": "cookie",
@@ -47982,14 +47982,14 @@
         "type": "int",
         "default": 800,
         "required": false,
-        "help": "Comments to return (max 800, 0 = post only)"
+        "help": "Top-level comments to return with their replies (max 800, 0 = post only)"
       },
       {
         "name": "timeout",
         "type": "int",
-        "default": 300,
+        "default": 900,
         "required": false,
-        "help": "Max seconds for the overall command (default: 300 — paced comment and reply pagination)"
+        "help": "Maximum seconds for the overall command"
       }
     ],
     "columns": [
@@ -48112,6 +48112,13 @@
         "default": 20,
         "required": false,
         "help": "Comments to embed per post as comment_preview (max 20, 0 = off)"
+      },
+      {
+        "name": "timeout",
+        "type": "int",
+        "default": 900,
+        "required": false,
+        "help": "Maximum seconds for the overall command"
       }
     ],
     "columns": [

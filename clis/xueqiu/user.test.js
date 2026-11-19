@@ -401,14 +401,17 @@ describe('xueqiu user', () => {
         await expect(rejection).rejects.toThrow(CommandExecutionError);
         await expect(rejection).rejects.toThrow('Unexpected response');
     });
-    it('throws auth-required error when the first timeline page is an html challenge', async () => {
+    it('reports browser verification when the first timeline page is a challenge', async () => {
         const page = createCommandPage({
             status: 200,
             contentType: 'text/html',
             json: null,
             textSnippet: '<textarea id="renderData">{"_waf_bd8ce2ce37":"token"}</textarea>',
         });
-        await expect(command.func(page, { user: '1102105103', limit: 5 })).rejects.toThrow(AuthRequiredError);
+        await expect(command.func(page, { user: '1102105103', limit: 5 })).rejects.toMatchObject({
+            name: 'CommandExecutionError',
+            message: expect.stringContaining('browser verification required'),
+        });
     });
     it('throws command-execution error when the first page fetch fails before any rows are available', async () => {
         const page = createCommandPage({
@@ -439,11 +442,10 @@ describe('xueqiu user', () => {
             maxRequests: 5,
             fetchPage,
             warn: mockWarn,
-        })).resolves.toMatchObject([
-            { id: '1', text: 'alpha' },
-            { id: '2', text: 'beta' },
-            { id: '3', text: 'gamma' },
-        ]);
+        })).resolves.toMatchObject({
+            rows: [{ id: '1', text: 'alpha' }, { id: '2', text: 'beta' }, { id: '3', text: 'gamma' }],
+            accessRestricted: false,
+        });
         expect(fetchPage).toHaveBeenCalledTimes(2);
         expect(fetchPage).toHaveBeenNthCalledWith(1, 1, 2);
         expect(fetchPage).toHaveBeenNthCalledWith(2, 2, 2);
@@ -467,11 +469,10 @@ describe('xueqiu user', () => {
             maxRequests: 5,
             fetchPage,
             warn: mockWarn,
-        })).resolves.toMatchObject([
-            { id: '21', text: 'page-three' },
-            { id: '22', text: 'page-three-b' },
-            { id: '23', text: 'page-four' },
-        ]);
+        })).resolves.toMatchObject({
+            rows: [{ id: '21', text: 'page-three' }, { id: '22', text: 'page-three-b' }, { id: '23', text: 'page-four' }],
+            accessRestricted: false,
+        });
         expect(fetchPage).toHaveBeenNthCalledWith(1, 3, 2);
         expect(fetchPage).toHaveBeenNthCalledWith(2, 4, 2);
     });
@@ -504,13 +505,27 @@ describe('xueqiu user', () => {
             maxRequests: 5,
             fetchPage,
             warn: mockWarn,
-        })).resolves.toMatchObject([
-            { id: '1', text: 'alpha' },
-            { id: '2', text: 'beta' },
-        ]);
+        })).resolves.toMatchObject({
+            rows: [{ id: '1', text: 'alpha' }, { id: '2', text: 'beta' }],
+            accessRestricted: true,
+        });
         expect(mockWarn).toHaveBeenCalledTimes(1);
         expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('2/3'));
-        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('anti-bot'));
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('browser verification required'));
+    });
+    it('keeps timeline rows and skips all comment requests after a rate limit', async () => {
+        const statuses = Array.from({ length: 20 }, (_, index) => ({ id: index + 1 }));
+        const page = createCommandPage(timelineResponse(statuses), [{
+            status: 429,
+            contentType: 'application/json',
+            json: null,
+            textSnippet: '',
+        }]);
+        const rows = await command.func(page, { user: '1102105103', limit: 21, comment_limit: 3 });
+        expect(rows).toHaveLength(20);
+        expect(rows.every(row => row.comment_preview === null)).toBe(true);
+        expect(page.evaluate).toHaveBeenCalledTimes(2);
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('rate limit (HTTP 429)'));
     });
     it('ends pagination quietly when a later page returns an empty timeline', async () => {
         const fetchPage = vi
@@ -528,7 +543,7 @@ describe('xueqiu user', () => {
             fetchPage,
             warn: mockWarn,
         });
-        expect(result).toMatchObject([
+        expect(result.rows).toMatchObject([
             { id: '1', text: 'alpha' },
             { id: '2', text: 'beta' },
         ]);
@@ -551,7 +566,7 @@ describe('xueqiu user', () => {
             fetchPage,
             warn: mockWarn,
         });
-        expect(result).toHaveLength(10);
+        expect(result.rows).toHaveLength(10);
         expect(fetchPage).toHaveBeenCalledTimes(5);
         expect(mockWarn).toHaveBeenCalledTimes(1);
         expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('10/12'));
@@ -588,13 +603,13 @@ describe('xueqiu user', () => {
             textSnippet: '',
         })).toMatchObject({ kind: 'ok' });
     });
-    it('classifies comment auth and challenge failures', () => {
+    it('distinguishes forbidden comment responses from browser challenges', () => {
         expect(classifyStatusCommentsResponse({
             status: 403,
             contentType: 'application/json',
             json: null,
             textSnippet: '',
-        })).toMatchObject({ kind: 'auth' });
+        })).toMatchObject({ kind: 'forbidden' });
         expect(classifyStatusCommentsResponse({
             status: 200,
             contentType: 'text/html',
@@ -664,7 +679,7 @@ describe('xueqiu user', () => {
         expect(page.evaluate).toHaveBeenCalledTimes(1);
         expect(mockWarn).toHaveBeenCalledTimes(1);
         expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('post 1'));
-        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('auth failure'));
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('access denied (HTTP 403)'));
     });
     it('rejects invalid comment limits before navigating the page', async () => {
         const page = { goto: vi.fn() };

@@ -45,7 +45,7 @@
 4. **screener 的 `type`**：`sh_sz / hk / us` 必传，漏了拿空数组
 5. **帖子评论走 v3**：`statuses/comments.json?statusId=` 已失效（400 `error_code 10020`），用 `statuses/v3/comments.json?id=&type=4&max_id=-1`
 6. **限频明显**：同 symbol 短时间反复调会 403，adapter 层建议加 300ms 间隔
-7. **评论接口连续请求会触发 JS 挑战**：几十次请求后返回 HTTP 200 `text/html` 的 `EO_Bot_Ssid` 挑战脚本（不是 JSON）；`isAntiBotHtml` 已识别，重新 `page.goto` 一次 xueqiu 页面即可过挑战后重试（见 `clis/xueqiu/post.js`）
+7. **评论接口可能返回 JS 验证页**：`isAntiBotHtml` 会识别 HTTP 200 `text/html` 中的 `EO_Bot_Ssid`。遇到验证时停止请求并保留已取得的数据。`user` 和 `post` 的 API 请求间隔为 6 秒。
 8. **蛋卷基金（`danjuanfunds.com`）是独立子品牌**：cookie 域不同，要单独获取
 
 ## 可参考的 adapter

@@ -13,9 +13,8 @@ vi.mock('@jackwener/opencli/logger', () => ({
         stepResult: vi.fn(),
     },
 }));
-import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
+import { ArgumentError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
 import { getRegistry } from '@jackwener/opencli/registry';
-import { classifyStatusCommentsResponse } from './utils.js';
 import {
     classifyStatusDetailResponse,
     collectCommentRows,
@@ -59,7 +58,7 @@ function commentItem(overrides = {}) {
         created_at: 1700000001000,
         user: { screen_name: 'bob', id: 22 },
         like_count: 5,
-        reply_count: 1,
+        reply_count: 0,
         ...overrides,
     };
 }
@@ -85,13 +84,17 @@ describe('xueqiu post', () => {
         expect(classifyStatusDetailResponse(envelope({ success: false, message: 'unexpected backend state' }))).toMatchObject({ kind: 'incompatible' });
         expect(classifyStatusDetailResponse(envelope(statusDetail()))).toMatchObject({ kind: 'ok' });
     });
+    it('ignores login wording inside a successful post body', () => {
+        const post = statusDetail({ text: '访问资料时显示 login required / 请先登录' });
+        expect(classifyStatusDetailResponse(envelope(post, { textSnippet: JSON.stringify(post) }))).toMatchObject({ kind: 'ok' });
+    });
     it('normalizes a status detail into a post row using the HTML body', () => {
         expect(normalizeStatusDetail(statusDetail())).toEqual({
             type: 'post',
             id: '99380989',
-            parent_id: null,
             author: 'alice',
             text: 'hello world',
+            parent_id: null,
             reply_to: null,
             likes: 4,
             replies: 12,
@@ -107,12 +110,13 @@ describe('xueqiu post', () => {
         expect(normalizeCommentItem(commentItem({
             reply_screenName: 'alice',
             like_count: 'oops',
+            reply_count: 1,
         }))).toEqual({
             type: 'comment',
             id: '11',
-            parent_id: null,
             author: 'bob',
             text: 'nice',
+            parent_id: null,
             reply_to: 'alice',
             likes: 0,
             replies: 1,
@@ -121,22 +125,17 @@ describe('xueqiu post', () => {
             url: 'https://xueqiu.com/22/11',
         });
     });
-    it('normalizes nested reply counts and falls back to the root author as reply target', () => {
+    it('prefers the nested reply count and falls back to the root author as reply target', () => {
         expect(normalizeCommentItem(commentItem({ reply_count: 0, comment_reply_count: 13 }))).toMatchObject({ replies: 13, reply_to: null });
-        expect(normalizeCommentItem(commentItem({ reply_user: { screen_name: 'carol' } }), { id: '7', author: 'alice' })).toMatchObject({ parent_id: '7', reply_to: 'carol' });
-        expect(normalizeCommentItem(commentItem({ reply_user: null }), { id: '7', author: 'alice' })).toMatchObject({ parent_id: '7', reply_to: 'alice' });
+        const root = { id: '7', author: 'alice' };
+        expect(normalizeCommentItem(commentItem({ reply_user: { screen_name: 'carol' } }), root)).toMatchObject({ parent_id: '7', reply_to: 'carol' });
+        expect(normalizeCommentItem(commentItem(), root)).toMatchObject({ parent_id: '7', reply_to: 'alice' });
     });
-    it('extracts child comments from the root echoed by the child_type=2 endpoint', () => {
-        const json = { comments: [{ id: 7, child_comments: [commentItem({ id: 71 }), commentItem({ id: 72 })] }] };
-        expect(getChildCommentItems(json, '7').map(item => item.id)).toEqual([71, 72]);
+    it('reads replies only from the requested comment thread', () => {
+        const json = { comments: [{ id: 7, child_comments: [commentItem({ id: 71 })] }] };
+        expect(getChildCommentItems(json, '7').map(item => item.id)).toEqual([71]);
+        expect(getChildCommentItems(json, '8')).toBeNull();
         expect(getChildCommentItems({ comments: [] }, '7')).toEqual([]);
-        expect(getChildCommentItems({ error: 'x' }, '7')).toBeNull();
-    });
-    it('classifies the EO_Bot_Ssid JS challenge as anti-bot', () => {
-        expect(classifyStatusCommentsResponse(envelope(null, {
-            contentType: 'text/html',
-            textSnippet: '<script>function a(a){case"0":t+="EO_Bot_Ssid=";continue;}</script>',
-        }))).toMatchObject({ kind: 'anti-bot' });
     });
     it('registers the xueqiu post command', () => {
         expect(command).toMatchObject({ site: 'xueqiu', name: 'post' });
@@ -197,6 +196,113 @@ describe('xueqiu post', () => {
         expect(page.evaluate).toHaveBeenNthCalledWith(2, expect.stringContaining('max_id=-1'));
         expect(page.evaluate).toHaveBeenNthCalledWith(3, expect.stringContaining('max_id=12'));
     });
+    it('expands nested replies by default and reuses complete embedded threads', async () => {
+        const embeddedReply = commentItem({ id: 111, text: 'already complete' });
+        const firstReply = commentItem({ id: 121, text: 'first reply' });
+        const secondReply = commentItem({ id: 122, text: 'second reply' });
+        const thirdReply = commentItem({ id: 123, text: 'third reply', reply_screenName: 'carol' });
+        function threadPage(replies, nextMaxId) {
+            return envelope({ comments: [commentItem({ id: 12, child_comments: replies })], next_max_id: nextMaxId });
+        }
+        const page = {
+            goto: vi.fn(),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(envelope(statusDetail()))
+                .mockResolvedValueOnce(envelope({
+                    comments: [
+                        commentItem({ id: 11, reply_count: 1, child_comments: [embeddedReply] }),
+                        commentItem({ id: 12, reply_count: 3, child_comments: [firstReply] }),
+                    ],
+                    next_max_id: -1,
+                }))
+                .mockResolvedValueOnce(threadPage([firstReply, secondReply], 122))
+                .mockResolvedValueOnce(threadPage([secondReply, thirdReply], '-1')),
+        };
+        const rows = await command.func(page, { status: '99380989' });
+        expect(rows.map(({ id, parent_id }) => [id, parent_id])).toEqual([
+            ['99380989', null], ['11', null], ['111', '11'], ['12', null], ['121', '12'], ['122', '12'], ['123', '12'],
+        ]);
+        expect(rows.at(-1)).toMatchObject({ type: 'comment', text: 'third reply', reply_to: 'carol' });
+        expect(page.evaluate).toHaveBeenCalledTimes(4);
+        expect(page.evaluate).toHaveBeenNthCalledWith(3, expect.stringContaining('comment_id=12&type=4&child_type=2&max_id=-1'));
+        expect(page.evaluate).toHaveBeenNthCalledWith(4, expect.stringContaining('max_id=122'));
+        expect(mockWarn).not.toHaveBeenCalled();
+    });
+    it('counts only top-level comments toward comment_limit', async () => {
+        const page = {
+            goto: vi.fn(),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(envelope(statusDetail()))
+                .mockResolvedValueOnce(envelope({ comments: [
+                    commentItem({ id: 11, reply_count: 2, child_comments: [commentItem({ id: 111 }), commentItem({ id: 112 })] }),
+                    commentItem({ id: 12 }),
+                ] })),
+        };
+        const rows = await command.func(page, { status: '99380989', comment_limit: 1 });
+        expect(rows.map(row => row.id)).toEqual(['99380989', '11', '111', '112']);
+        expect(page.evaluate).toHaveBeenCalledTimes(2);
+    });
+    it('keeps fetched and embedded replies when a nested page is rate limited', async () => {
+        const page = {
+            goto: vi.fn(),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(envelope(statusDetail()))
+                .mockResolvedValueOnce(envelope({ comments: [
+                    commentItem({ id: 11, reply_count: 3, child_comments: [commentItem({ id: 111 })] }),
+                    commentItem({ id: 12, reply_count: 2, child_comments: [commentItem({ id: 121 })] }),
+                ] }))
+                .mockResolvedValueOnce(envelope({
+                    comments: [commentItem({ id: 11, child_comments: [commentItem({ id: 111 }), commentItem({ id: 112 })] })],
+                    next_max_id: 112,
+                }))
+                .mockResolvedValueOnce(envelope(null, { status: 429 })),
+        };
+        const rows = await command.func(page, { status: '99380989' });
+        expect(rows.map(({ id, parent_id }) => [id, parent_id])).toEqual([
+            ['99380989', null], ['11', null], ['111', '11'], ['112', '11'], ['12', null], ['121', '12'],
+        ]);
+        expect(page.evaluate).toHaveBeenCalledTimes(4);
+        expect(mockWarn).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/comment 11.*2\/3.*HTTP 429/));
+    });
+    it.each([
+        ['<script></script>', 'unexpected HTML response (HTTP 200, text/html)'],
+        ['<script>/* EO_Bot_Ssid */</script>', 'browser verification required'],
+    ])('stops on script-only HTML %s, preserving replies from earlier pages', async (textSnippet, reason) => {
+        const page = {
+            goto: vi.fn(),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(envelope(statusDetail()))
+                .mockResolvedValueOnce(envelope({ comments: [
+                    commentItem({ id: 11, reply_count: 3 }),
+                    commentItem({ id: 12, reply_count: 2 }),
+                ] }))
+                .mockResolvedValueOnce(envelope({
+                    comments: [commentItem({ id: 11, child_comments: [commentItem({ id: 111 })] })],
+                    next_max_id: 111,
+                }))
+                .mockResolvedValueOnce(envelope(null, { contentType: 'text/html', textSnippet })),
+        };
+        const rows = await command.func(page, { status: '99380989' });
+        expect(rows.map(row => row.id)).toEqual(['99380989', '11', '111', '12']);
+        expect(page.evaluate).toHaveBeenCalledTimes(4);
+        expect(mockWarn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(reason));
+    });
+    it('skips nested requests after a top-level page is restricted', async () => {
+        const page = {
+            goto: vi.fn(),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(envelope(statusDetail()))
+                .mockResolvedValueOnce(envelope({
+                    comments: [commentItem({ id: 11, reply_count: 3, child_comments: [commentItem({ id: 111 })] })],
+                    next_max_id: 11,
+                }))
+                .mockResolvedValueOnce(envelope(null, { status: 403 })),
+        };
+        const rows = await command.func(page, { status: '99380989' });
+        expect(rows.map(row => row.id)).toEqual(['99380989', '11', '111']);
+        expect(page.evaluate).toHaveBeenCalledTimes(3);
+        expect(mockWarn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('HTTP 403'));
+    });
     it('throws empty-result when the post does not exist', async () => {
         const page = {
             goto: vi.fn().mockResolvedValue(undefined),
@@ -206,7 +312,7 @@ describe('xueqiu post', () => {
         await expect(rejection).rejects.toThrow(EmptyResultError);
         await expect(rejection).rejects.toThrow('1');
     });
-    it('throws auth-required when the detail page is a challenge', async () => {
+    it('reports browser verification when the detail page is a challenge', async () => {
         const page = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn().mockResolvedValueOnce(envelope(null, {
@@ -214,7 +320,25 @@ describe('xueqiu post', () => {
                 textSnippet: '<textarea id="renderData">{"_waf_bd8ce2ce37":"token"}</textarea>',
             })),
         };
-        await expect(command.func(page, { status: '99380989', comment_limit: 5 })).rejects.toThrow(AuthRequiredError);
+        await expect(command.func(page, { status: '99380989', comment_limit: 5 })).rejects.toMatchObject({
+            name: 'CommandExecutionError',
+            message: expect.stringContaining('browser verification required'),
+        });
+        expect(page.evaluate).toHaveBeenCalledTimes(1);
+    });
+    it('keeps the post when the first comments page is rate limited', async () => {
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce(envelope(statusDetail()))
+                .mockResolvedValueOnce(envelope({ comments: [] }, { status: 429 })),
+        };
+        const result = await command.func(page, { status: '99380989', comment_limit: 3 });
+        expect(result).toMatchObject([{ type: 'post', id: '99380989' }]);
+        expect(page.evaluate).toHaveBeenCalledTimes(2);
+        expect(page.evaluate).toHaveBeenNthCalledWith(2, expect.stringContaining('size=3'));
+        expect(mockWarn).toHaveBeenCalledTimes(1);
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('collected 0/3 items, reason: rate limit (HTTP 429)'));
     });
     it('throws command-execution when the first comments page is unusable', async () => {
         const page = {
@@ -246,11 +370,10 @@ describe('xueqiu post', () => {
             maxPages: 5,
             fetchPage,
             warn: mockWarn,
-        })).resolves.toMatchObject([
-            { id: '1', text: 'a' },
-            { id: '2', text: 'b' },
-            { id: '3', text: 'c' },
-        ]);
+        })).resolves.toMatchObject({
+            comments: [{ id: 1, text: 'a' }, { id: 2, text: 'b' }, { id: 3, text: 'c' }],
+            interrupted: false,
+        });
         expect(fetchPage).toHaveBeenCalledTimes(2);
         expect(mockWarn).not.toHaveBeenCalled();
     });
@@ -272,93 +395,18 @@ describe('xueqiu post', () => {
             maxPages: 5,
             fetchPage,
             warn: mockWarn,
-        })).resolves.toMatchObject([
-            { id: '1', text: 'a' },
-            { id: '2', text: 'b' },
-        ]);
+        })).resolves.toMatchObject({
+            comments: [{ id: 1, text: 'a' }, { id: 2, text: 'b' }],
+            interrupted: true,
+        });
         expect(mockWarn).toHaveBeenCalledTimes(1);
         expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('2/5'));
-        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('auth failure'));
+        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('browser verification required'));
     });
-    it('uses the embedded child preview when it already covers every nested reply', async () => {
-        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
-            comments: [commentItem({
-                id: 1,
-                comment_reply_count: 2,
-                child_comments: [commentItem({ id: 11, text: 'r1', user: { screen_name: 'carol', id: 33 } }), commentItem({ id: 12, text: 'r2', reply_user: { screen_name: 'carol' } })],
-            })],
-            next_max_id: -1,
-        }));
-        const fetchChildPage = vi.fn();
-        const result = await collectCommentRows({
-            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
-        });
-        expect(result.map(row => [row.id, row.parent_id, row.reply_to])).toEqual([['1', null, null], ['11', '1', 'bob'], ['12', '1', 'carol']]);
-        expect(fetchChildPage).not.toHaveBeenCalled();
-    });
-    it('paginates nested replies after each root comment when the preview is partial', async () => {
-        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
-            comments: [
-                commentItem({ id: 1, comment_reply_count: 3, child_comments: [commentItem({ id: 11 })] }),
-                commentItem({ id: 2 }),
-            ],
-            next_max_id: -1,
-        }));
-        const fetchChildPage = vi
-            .fn()
-            .mockResolvedValueOnce(envelope({ comments: [{ id: 1, child_comments: [commentItem({ id: 11 }), commentItem({ id: 12 })] }], next_max_id: 12 }))
-            .mockResolvedValueOnce(envelope({ comments: [{ id: 1, child_comments: [commentItem({ id: 13 })] }], next_max_id: -1 }));
-        const result = await collectCommentRows({
-            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
-        });
-        expect(result.map(row => row.id)).toEqual(['1', '11', '12', '13', '2']);
-        expect(fetchChildPage).toHaveBeenNthCalledWith(1, '1', -1, 20);
-        expect(fetchChildPage).toHaveBeenNthCalledWith(2, '1', 12, 20);
-        expect(mockWarn).not.toHaveBeenCalled();
-    });
-    it('counts nested replies toward the limit', async () => {
-        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
-            comments: [commentItem({ id: 1, comment_reply_count: 2, child_comments: [commentItem({ id: 11 }), commentItem({ id: 12 })] }), commentItem({ id: 2 })],
-            next_max_id: -1,
-        }));
-        const result = await collectCommentRows({
-            statusId: '99380989', limit: 2, pageSize: 20, maxPages: 5, fetchPage, warn: mockWarn,
-        });
-        expect(result.map(row => row.id)).toEqual(['1', '11']);
-    });
-    it('returns partial rows and warns when a nested reply page fails', async () => {
-        const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
-            comments: [commentItem({ id: 1, comment_reply_count: 5, child_comments: [] }), commentItem({ id: 2 })],
-            next_max_id: -1,
-        }));
-        const fetchChildPage = vi.fn().mockResolvedValueOnce(envelope({ success: false }));
-        const result = await collectCommentRows({
-            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, fetchChildPage, warn: mockWarn,
-        });
-        expect(result.map(row => row.id)).toEqual(['1']);
-        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('replies to comment 1'));
-        expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('unexpected response shape'));
-    });
-    it('recovers from a mid-run anti-bot challenge and retries the same page', async () => {
-        const challenge = envelope(null, { contentType: 'text/html', textSnippet: '<script>t+="EO_Bot_Ssid="</script>' });
-        const fetchPage = vi
-            .fn()
-            .mockResolvedValueOnce(envelope({ comments: [commentItem({ id: 1 })], next_max_id: 1 }))
-            .mockResolvedValueOnce(challenge)
-            .mockResolvedValueOnce(envelope({ comments: [commentItem({ id: 2 })], next_max_id: -1 }));
-        const recover = vi.fn().mockResolvedValue(undefined);
-        const result = await collectCommentRows({
-            statusId: '99380989', limit: 20, pageSize: 20, maxPages: 5, fetchPage, recover, maxRecoveries: 1, warn: mockWarn,
-        });
-        expect(result.map(row => row.id)).toEqual(['1', '2']);
-        expect(recover).toHaveBeenCalledTimes(1);
-        expect(fetchPage).toHaveBeenNthCalledWith(3, 1, 20);
-        expect(mockWarn).not.toHaveBeenCalled();
-    });
-    it('ends comment pagination quietly when next_max_id is -1', async () => {
+    it.each([-1, '-1'])('ends comment pagination quietly when next_max_id is %j', async (nextMaxId) => {
         const fetchPage = vi.fn().mockResolvedValueOnce(envelope({
             comments: [commentItem({ id: 1, text: 'a' })],
-            next_max_id: -1,
+            next_max_id: nextMaxId,
         }));
         const result = await collectCommentRows({
             statusId: '99380989',
@@ -368,7 +416,7 @@ describe('xueqiu post', () => {
             fetchPage,
             warn: mockWarn,
         });
-        expect(result).toHaveLength(1);
+        expect(result.comments).toHaveLength(1);
         expect(fetchPage).toHaveBeenCalledTimes(1);
         expect(mockWarn).not.toHaveBeenCalled();
     });

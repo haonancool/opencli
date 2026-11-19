@@ -1,16 +1,18 @@
 import { cli, Strategy } from '@jackwener/opencli/registry';
-import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
+import { ArgumentError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
 import { log } from '@jackwener/opencli/logger';
 import { isRecord } from '@jackwener/opencli/utils';
 import {
-    classifyBrowserAuthFailure,
+    classifyXueqiuAccessFailure,
     classifyStatusCommentsResponse,
+    describeXueqiuAccessFailure,
     envelopeTextFromJson,
     fetchXueqiuEnvelope,
     getStatusCommentItems,
     normalizeIdentifier,
     statusUrl,
     stripTags,
+    throwXueqiuAccessFailure,
     toFiniteCount,
     toIsoTimestamp,
 } from './utils.js';
@@ -23,8 +25,6 @@ const STATUS_COMMENTS_MAX = 20;
 const COMMENT_PREVIEW_TEXT_LENGTH = 60;
 
 const FAILURE_REASON_BY_KIND = {
-    auth: 'auth failure',
-    'anti-bot': 'anti-bot challenge',
     'not-found': 'user does not exist',
     empty: 'no more timeline data',
     incompatible: 'unexpected response shape',
@@ -55,9 +55,9 @@ export function classifyXueqiuUserResponse(response) {
     const jsonRecord = isRecord(response.json) ? response.json : null;
     const statusItems = jsonRecord ? getTimelineItems(jsonRecord) : null;
     const envelopeText = envelopeTextFromJson(jsonRecord);
-    const authFailure = classifyBrowserAuthFailure(response, envelopeText);
-    if (authFailure)
-        return authFailure;
+    const accessFailure = classifyXueqiuAccessFailure(response, envelopeText);
+    if (accessFailure)
+        return accessFailure;
     if (jsonRecord && envelopeText && statusItems === null) {
         if (/用户不存在|user does not exist|user not found/.test(envelopeText)
             || jsonRecord.error_code === '20206') {
@@ -103,7 +103,7 @@ export function normalizeTimelineItem(item) {
  * @returns Human-readable reason fragment for stderr warnings.
  */
 export function describeFailureKind(kind) {
-    return FAILURE_REASON_BY_KIND[kind];
+    return describeXueqiuAccessFailure(kind) ?? FAILURE_REASON_BY_KIND[kind];
 }
 
 /**
@@ -175,9 +175,7 @@ export async function resolveUserByQuery(page, query) {
     const url = `/query/v1/search/user.json?q=${encodeURIComponent(query)}&count=${USER_SEARCH_COUNT}&page=1`;
     const response = await fetchInPage(page, url);
     const classified = classifySearchResponse(response);
-    if (classified.kind === 'auth' || classified.kind === 'anti-bot') {
-        throw new AuthRequiredError('xueqiu.com', 'User search requires login or challenge clearance');
-    }
+    throwXueqiuAccessFailure(classified.kind, `Searching xueqiu users for ${query}`);
     if (classified.kind === 'incompatible' || classified.kind === 'unknown') {
         throw new CommandExecutionError(`Unexpected response while searching xueqiu users for ${query}`, 'Run the command again with --verbose to inspect the raw site response.');
     }
@@ -199,9 +197,9 @@ export async function resolveUserByQuery(page, query) {
 export function classifySearchResponse(response) {
     const jsonRecord = isRecord(response.json) ? response.json : null;
     const envelopeText = envelopeTextFromJson(jsonRecord);
-    const authFailure = classifyBrowserAuthFailure(response, envelopeText);
-    if (authFailure)
-        return authFailure;
+    const accessFailure = classifyXueqiuAccessFailure(response, envelopeText);
+    if (accessFailure)
+        return accessFailure;
     if (response.contentType.includes('application/json') && jsonRecord && !Array.isArray(jsonRecord.list)) {
         return { kind: 'incompatible' };
     }
@@ -222,7 +220,7 @@ function buildPaginationStopMessage(requestNumber, collected, target, reason) {
  * an explicit 1-based API page.
  *
  * @param options Pagination inputs and a page-fetch callback.
- * @returns Deduplicated normalized rows, possibly partial with a warning.
+ * @returns Deduplicated rows and whether an access restriction stopped pagination.
  */
 export async function collectTimelineRows(options) {
     const warn = options.warn ?? log.warn;
@@ -234,9 +232,7 @@ export async function collectTimelineRows(options) {
         const response = await options.fetchPage(pageNumber, options.pageSize);
         const classified = classifyXueqiuUserResponse(response);
         if (requestNumber === 1 && classified.kind !== 'unknown' && classified.kind !== 'empty') {
-            if (classified.kind === 'auth' || classified.kind === 'anti-bot') {
-                throw new AuthRequiredError('xueqiu.com', 'User timeline requires login or challenge clearance');
-            }
+            throwXueqiuAccessFailure(classified.kind, `Loading xueqiu timeline for user ${options.userId}`);
             if (classified.kind === 'not-found') {
                 throw new EmptyResultError(`xueqiu/user ${options.userId}`, `xueqiu user ${options.userId} does not exist. If this was meant as a screen name, pass the profile URL instead.`);
             }
@@ -250,7 +246,7 @@ export async function collectTimelineRows(options) {
         }
         else if (classified.kind !== 'unknown') {
             warn(buildPaginationStopMessage(requestNumber, rows.length, options.limit, describeFailureKind(classified.kind)));
-            break;
+            return { rows, accessRestricted: Boolean(describeXueqiuAccessFailure(classified.kind)) };
         }
         const rawItems = getTimelineItems(response.json) ?? [];
         const pageRows = rawItems
@@ -274,7 +270,7 @@ export async function collectTimelineRows(options) {
             advanced = true;
         }
         if (rows.length >= options.limit) {
-            return rows.slice(0, options.limit);
+            break;
         }
         if (rawItems.length < options.pageSize) {
             break;
@@ -287,7 +283,7 @@ export async function collectTimelineRows(options) {
             warn(buildPaginationStopMessage(requestNumber, rows.length, options.limit, 'reached safety cap'));
         }
     }
-    return rows.slice(0, options.limit);
+    return { rows: rows.slice(0, options.limit), accessRestricted: false };
 }
 
 /**
@@ -349,8 +345,7 @@ export async function enrichRowsWithComments(page, rows, commentLimit, warn = lo
             row.comment_preview = summarizeStatusComments(comments.slice(0, commentLimit));
             continue;
         }
-        warn(`xueqiu user comment enrichment stopped at post ${row.id}, `
-            + `reason: ${classified.kind === 'auth' || classified.kind === 'anti-bot' ? 'auth failure' : classified.kind === 'unknown' ? 'unknown request failure' : 'unexpected response shape'}`);
+        warn(`xueqiu user comment enrichment stopped at post ${row.id}, reason: ${describeFailureKind(classified.kind)}`);
         break;
     }
     return rows;
@@ -375,6 +370,7 @@ cli({
         { name: 'limit', type: 'int', default: 20, help: 'Number of posts to return (max 100)' },
         { name: 'page', type: 'int', default: 1, help: '1-based timeline page to start from (20 posts per page)' },
         { name: 'comment_limit', type: 'int', default: 20, help: 'Comments to embed per post as comment_preview (max 20, 0 = off)' },
+        { name: 'timeout', type: 'int', default: 900, help: 'Maximum seconds for the overall command' },
     ],
     columns: ['id', 'author', 'text', 'comment_preview', 'likes', 'replies', 'retweets', 'created_at', 'url'],
     func: async (page, args) => {
@@ -407,7 +403,7 @@ cli({
             userId = normalizeIdentifier(matched.id);
             log.info(`xueqiu user: resolved "${reference.query}" to ${String(matched.screen_name ?? '')} (user_id ${userId})`);
         }
-        const rows = await collectTimelineRows({
+        const { rows, accessRestricted } = await collectTimelineRows({
             userId,
             limit,
             startPage,
@@ -419,7 +415,7 @@ cli({
         if (rows.length === 0) {
             throw new EmptyResultError(`xueqiu/user ${userId}`, `No posts found for xueqiu user ${userId}`);
         }
-        if (commentLimit > 0) {
+        if (commentLimit > 0 && !accessRestricted) {
             await enrichRowsWithComments(page, rows, commentLimit, log.warn);
         }
         return rows;

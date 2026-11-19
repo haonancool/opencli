@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { fetchXueqiuEnvelope, formatChinaDate, stripHtml } from './utils.js';
 
@@ -33,6 +34,34 @@ describe('fetchXueqiuEnvelope', () => {
         expect(script).toContain('new URL(');
         expect(script).toContain('location.origin');
         expect(script).toContain('/v4/statuses/user_timeline.json?user_id=1');
+    });
+    it('waits six seconds before each read, including the first request', async () => {
+        vi.useFakeTimers();
+        try {
+            const fetch = vi.fn().mockResolvedValue({
+                headers: { get: () => 'application/json' }, status: 200, text: async () => '{}',
+            });
+            const page = {
+                evaluate: script => runInNewContext(script, { URL, location: { origin: 'https://xueqiu.com' }, fetch, setTimeout }),
+            };
+            const paths = [
+                '/v4/statuses/user_timeline.json?user_id=1',
+                '/statuses/show.json?id=1',
+                '/statuses/v3/comments.json?id=1',
+                '/statuses/v3/comments.json?id=1&comment_id=2&child_type=2',
+            ];
+            for (const [index, path] of paths.entries()) {
+                const pending = fetchXueqiuEnvelope(page, path);
+                await vi.advanceTimersByTimeAsync(5999);
+                expect(fetch).toHaveBeenCalledTimes(index);
+                await vi.advanceTimersByTimeAsync(1);
+                await pending;
+                expect(fetch).toHaveBeenCalledTimes(index + 1);
+                expect(fetch).toHaveBeenLastCalledWith(`https://xueqiu.com${path}`, expect.any(Object));
+            }
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

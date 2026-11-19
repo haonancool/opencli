@@ -1,6 +1,8 @@
 import { AuthRequiredError, CommandExecutionError } from '@jackwener/opencli/errors';
 import { isRecord } from '@jackwener/opencli/utils';
 
+const XUEQIU_READ_DELAY_MS = 6000;
+
 const CHINA_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
@@ -71,6 +73,9 @@ export async function fetchXueqiuJson(page, url) {
  * CORS preflight that xueqiu's openresty rejects with 400 — the GET never
  * runs. Passing a site-relative path keeps every request same-origin.
  *
+ * Wait before every read, including the first, so serial CLI invocations
+ * also leave a gap between API requests.
+ *
  * @param page Active browser page.
  * @param urlOrPath Site-relative API path (recommended) or absolute xueqiu URL.
  * @returns Structured response for command-side classification.
@@ -80,6 +85,7 @@ export async function fetchXueqiuEnvelope(page, urlOrPath) {
     (async () => {
       const target = new URL(${JSON.stringify(urlOrPath)}, location.origin);
       try {
+        await new Promise(resolve => setTimeout(resolve, ${XUEQIU_READ_DELAY_MS}));
         const response = await fetch(target.toString(), {
           credentials: 'include',
           headers: {
@@ -136,15 +142,44 @@ export function envelopeTextFromJson(jsonRecord) {
     ].filter(Boolean).join(' ').toLowerCase();
 }
 
-export function classifyBrowserAuthFailure(response, envelopeText = '') {
+const ACCESS_FAILURES = {
+    auth: 'login required',
+    'anti-bot': 'browser verification required',
+    forbidden: 'access denied (HTTP 403)',
+    'rate-limit': 'rate limit (HTTP 429)',
+};
+
+export function classifyXueqiuAccessFailure(response, envelopeText = '') {
+    if (response.status === 429)
+        return { kind: 'rate-limit' };
     if (isAntiBotHtml(response, envelopeText))
         return { kind: 'anti-bot' };
-    if (response.status === 401 || response.status === 403)
+    if (response.status === 401)
         return { kind: 'auth' };
-    const responseText = `${envelopeText} ${response.textSnippet}`.toLowerCase();
-    if (/login required|unauthorized|unauthorised|forbidden|not logged in|need login/.test(responseText))
+    // JSON snippets can contain user posts mentioning these phrases.
+    const responseText = (response.json == null ? response.textSnippet ?? '' : envelopeText).toLowerCase();
+    if (/login required|unauthorized|unauthorised|not logged in|need login|请先登录|请登录|未登录|登录已过期/.test(responseText))
         return { kind: 'auth' };
+    if (response.status === 403)
+        return { kind: 'forbidden' };
     return null;
+}
+
+export function describeXueqiuAccessFailure(kind) {
+    return ACCESS_FAILURES[kind];
+}
+
+export function throwXueqiuAccessFailure(kind, operation) {
+    const reason = describeXueqiuAccessFailure(kind);
+    if (!reason)
+        return;
+    const message = `${operation}: ${reason}`;
+    if (kind === 'auth')
+        throw new AuthRequiredError('xueqiu.com', message);
+    const hint = kind === 'rate-limit'
+        ? 'Wait for the rate limit to clear before running the command again.'
+        : 'Open xueqiu.com in Chrome and check whether the requested content is accessible.';
+    throw new CommandExecutionError(message, hint);
 }
 
 /**
@@ -171,9 +206,9 @@ export function classifyStatusCommentsResponse(response) {
     const jsonRecord = isRecord(response.json) ? response.json : null;
     const commentItems = jsonRecord ? getStatusCommentItems(jsonRecord) : null;
     const envelopeText = envelopeTextFromJson(jsonRecord);
-    const authFailure = classifyBrowserAuthFailure(response, envelopeText);
-    if (authFailure)
-        return authFailure;
+    const accessFailure = classifyXueqiuAccessFailure(response, envelopeText);
+    if (accessFailure)
+        return accessFailure;
     if (commentItems !== null)
         return { kind: 'ok' };
     if (response.contentType.includes('application/json') && jsonRecord)

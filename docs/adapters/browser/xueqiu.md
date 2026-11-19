@@ -12,7 +12,7 @@
 | `opencli xueqiu hot` | 获取雪球热门动态 |
 | `opencli xueqiu search` | 搜索雪球股票（代码或名称） |
 | `opencli xueqiu user` | 获取指定博主（用户）的帖子时间线 |
-| `opencli xueqiu post` | 获取单条帖子正文和评论 |
+| `opencli xueqiu post` | 获取单条帖子正文、评论和楼中楼回复 |
 | `opencli xueqiu stock` | 获取雪球股票实时行情 |
 | `opencli xueqiu comments` | 获取单只股票的讨论动态（按时间排序） |
 | `opencli xueqiu watchlist` | 获取雪球自选股列表 |
@@ -47,7 +47,7 @@ opencli xueqiu user 但斌 --limit 5 --comment_limit 3
 # Start from a later timeline page (20 posts per page)
 opencli xueqiu user 但斌 --page 2 --limit 20
 
-# Read one post with its comments (status id or URL)
+# Read one post with its top-level comments and nested replies (status id or URL)
 opencli xueqiu post 99380989
 opencli xueqiu post https://xueqiu.com/9089343523/99380989 --comment_limit 20
 opencli xueqiu post 99380989 --comment_limit 0
@@ -85,5 +85,8 @@ opencli xueqiu feed -v
 - `user` accepts a screen name (resolved via user search, exact match preferred), a numeric `user_id`, or a profile URL (`https://xueqiu.com/u/<user_id>`); the first row may be a pinned post, and reposts show the blogger's own comment
 - `user --page N` starts from Xueqiu's 1-based timeline page (20 posts per page) and still collects up to `--limit` items from that page onward
 - `user --comment_limit N` (max 20, default 20) fetches the first N comments per post and embeds them as a `comment_preview` column (`author -> repliee: text | ...`); pass `--comment_limit 0` to skip comments. It costs one extra request per post and stops with a warning if the site starts rejecting comment fetches
-- `post` returns the post as the first row (`type=post`) and each comment as a following row (`type=comment`), with every root comment immediately followed by its nested replies (楼中楼). `parent_id` is the root comment id for nested replies and empty for the post and root comments; `reply_to` names the repliee, falling back to the root comment's author. On comment rows `replies` is the nested-reply count. `--comment_limit` (roots and nested replies combined) defaults to 800 and `0` skips comments. Xueqiu's public root-comment stream is a filtered subset (commonly capped around 150), so the command returns every comment the API exposes, not necessarily the raw post `replies` count. Requests are paced and a mid-run anti-bot challenge triggers a page reload and retry, so large threads can take a minute or more (`--timeout` defaults to 300s)
+- `post` returns the post first (`type=post`), followed by each top-level comment and its nested replies (`type=comment`). A nested reply's `parent_id` identifies its top-level comment. `reply_to` gives the reply target's name, falling back to the top-level comment's author. On comment rows, `replies` is the nested reply count.
+- `post --comment_limit N` selects up to N top-level comments (default and max 800). Their nested replies load by default and are included in addition to those N rows. Set `--comment_limit 0` to fetch only the post. The site can filter what it exposes, so the returned rows may differ from the post's `replies` count.
+- `user` and `post` wait six seconds before every API read, including timeline pages, post details, top-level comments, and nested reply pages. Run one command at a time when reading a batch to maintain this spacing across commands. The default command timeout is 900 seconds. Use `--timeout` for larger reads. If a nested reply request stops, `post` reports the parent comment and response type in stderr.
+- If `user` or `post` encounters a login requirement, browser verification, HTTP 403, or HTTP 429 after fetching posts, it stops fetching and returns the data it already has. Check stderr for the stop reason before treating the output as complete. For browser verification, open Xueqiu in Chrome and complete the site's prompt. For HTTP 429, wait for the rate limit to clear before running the command again.
 - If the commands return empty data, first confirm the logged-in browser can directly see the Danjuan asset page
