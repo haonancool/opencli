@@ -18,6 +18,13 @@
 | `opencli weibo delete` | 删除登录账号自己的单条微博 |
 | `opencli weibo comments` | 微博评论 |
 
+For `weibo comments -f json` or `-f yaml`, each top-level row includes
+`reply_items` with the reply previews returned in the first response. The
+`replies` field remains Weibo’s reported reply count and can exceed the number
+of previews. The command reads one page and leaves additional replies collapsed.
+Comments include `id` when available, and replies include `reply_to_id` when
+Weibo provides the referenced comment ID.
+
 ## Usage Examples
 
 ```bash

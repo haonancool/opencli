@@ -32,9 +32,12 @@ cli({
         const data = await resp.json();
         if (!data.ok) return {error: 'API error: ' + (data.msg || 'unknown')};
 
-        return (data.data || []).map((c, i) => {
+        const commentId = (comment) => {
+          const value = comment?.idstr || comment?.id;
+          return typeof value === 'string' || Number.isSafeInteger(value) ? String(value) : undefined;
+        };
+        const toComment = (c) => {
           const item = {
-            rank: i + 1,
             author: c.user?.screen_name || '',
             text: strip(c.text || ''),
             likes: c.like_count || 0,
@@ -45,6 +48,29 @@ cli({
             item.reply_to = (c.reply_comment.user?.screen_name || '') + ': ' + strip(c.reply_comment.text || '').substring(0, 80);
           }
           return item;
+        };
+
+        return (data.data || []).map((c, i) => {
+          const id = commentId(c);
+          const seen = new Set(id ? [id] : []);
+          const reply_items = (Array.isArray(c.comments) ? c.comments : []).flatMap((reply) => {
+            if (!reply || typeof reply !== 'object' || Array.isArray(reply)) return [];
+            const replyId = commentId(reply);
+            if (replyId && seen.has(replyId)) return [];
+            if (replyId) seen.add(replyId);
+            const replyToId = commentId(reply.reply_comment);
+            return [{
+              ...toComment(reply),
+              ...(replyId ? { id: replyId } : {}),
+              ...(replyToId ? { reply_to_id: replyToId } : {}),
+            }];
+          });
+          return {
+            rank: i + 1,
+            ...toComment(c),
+            ...(id ? { id } : {}),
+            reply_items,
+          };
         });
       })()
     `)), 'weibo comments');
