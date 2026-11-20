@@ -47,6 +47,18 @@ describe('zsxq topics command', () => {
                                     { comment_id: 1, owner: { name: 'Alice' }, text: 'First comment' },
                                     { comment_id: 2, parent_comment_id: 1, owner: { name: 'Bob' }, repliee: { name: 'Alice' }, text: 'A reply' },
                                 ],
+                            }, {
+                                topic_id: 102,
+                                type: 'talk',
+                                talk: {
+                                    images: [
+                                        { thumbnail: { url: 'https://example.test/thumb.png' } },
+                                        {
+                                            large: { url: 'https://example.test/large.png' },
+                                            thumbnail: { url: 'https://example.test/other-thumb.png' },
+                                        },
+                                    ],
+                                },
                             }],
                     },
                 },
@@ -65,7 +77,7 @@ describe('zsxq topics command', () => {
         expect(requestScript).toContain('count=7');
         expect(requestScript).toContain('begin_time=2026-08-06T12%3A40%3A04.266%2B0800');
         expect(requestScript).not.toContain('end_time=');
-        expect(result).toHaveLength(1);
+        expect(result).toHaveLength(2);
         expect(result[0]).toMatchObject({
             topic_id: 101,
             files: [{ file_id: 202, name: 'report.pdf' }],
@@ -81,6 +93,10 @@ describe('zsxq topics command', () => {
                 },
             ],
         });
+        expect(result[0].images).toEqual([]);
+        expect(result[1].images).toEqual([
+            { url: 'https://example.test/large.png' },
+        ]);
         expect(result[0]).not.toHaveProperty('content');
         expect(result[0]).not.toHaveProperty('file_preview');
     });

@@ -24,7 +24,17 @@ describe('zsxq topic command', () => {
                         resp_data: {
                             topic_id: 1,
                             type: 'talk',
-                            talk: { owner: { name: 'alice' }, text: 'hello topic' },
+                            talk: {
+                                owner: { name: 'alice' },
+                                text: 'hello topic',
+                                images: [{
+                                    large: { url: 'https://example.test/large.png?signature=fixture' },
+                                    thumbnail: { url: 'https://example.test/thumb.png' },
+                                    original: { url: 'https://example.test/original.png' },
+                                }, {
+                                    thumbnail: { url: 'https://example.test/thumbnail-only.png' },
+                                }],
+                            },
                             comments_count: 1,
                             likes_count: 2,
                         },
@@ -53,6 +63,10 @@ describe('zsxq topic command', () => {
             comments: 1,
             likes: 2,
         });
+        expect(rows[0].images).toEqual([{
+            url: 'https://example.test/large.png?signature=fixture',
+        }]);
+        expect(rows[0].files).toEqual([]);
         expect(rows[0].comment_preview).toContain('bob: hi');
         expect(evaluateUrls.join('\n')).toContain('/v2/topics/1/info');
         expect(evaluateUrls.join('\n')).toContain('/v2/topics/1/comments');

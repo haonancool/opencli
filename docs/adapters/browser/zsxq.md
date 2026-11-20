@@ -56,6 +56,7 @@ opencli zsxq dynamics --limit 20
 - `zsxq topics` and `zsxq search` use the current active group context from Chrome by default
 - `zsxq topics --scope` accepts `all`, `digests`, `by_owner`, `questions`, `with_files`, and `with_images`
 - Topic JSON/YAML output includes a structured `files` list with each attachment's `file_id` and `name`
+- Topic JSON/YAML output includes an `images` list. Each `images[].url` is the API’s large image URL. Images without a large URL are omitted, and URLs may expire.
 - Q&A topics expose separate `question` and `answer` fields instead of a `content` field
 - `question`, `answer`, and `content` preserve the API's original newlines and other whitespace characters
 - Topic output keeps `comments` as the comment count, uses `comment_preview` for readable text, and nests replies under each `comment_items[].replies` array

@@ -223,6 +223,18 @@ export function getTopicContent(topic) {
 function normalizeTopicText(value) {
     return typeof value === 'string' ? value : '';
 }
+function getTopicImages(topic) {
+    const sections = [topic.talk, topic.question, topic.answer, topic.task, topic.solution];
+    return sections.flatMap((section) => {
+        if (!Array.isArray(section?.images))
+            return [];
+        return section.images.flatMap((image) => {
+            const url = image?.large?.url;
+            return typeof url === 'string' && url.trim() ? [{ url }] : [];
+        });
+    });
+}
+
 export function getTopicFiles(topic) {
     // mirrors the official web client, which renders app-file-gallery from
     // talk.files / task.files / solution.files (never answer or question)
@@ -364,6 +376,7 @@ export function toTopicRow(topic) {
         readers: topic.readers_count ?? topic.reading_count ?? 0,
         time: topic.create_time || '',
         files,
+        images: getTopicImages(topic),
         comment_preview: summarizeComments(comments),
         url: getTopicUrl(topicUid || topicId),
     };
