@@ -44150,6 +44150,37 @@
   },
   {
     "site": "weibo",
+    "name": "article",
+    "description": "Read the body of an independent Weibo headline article",
+    "access": "read",
+    "domain": "weibo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "source",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Weibo status ID, post URL, or desktop headline article URL"
+      }
+    ],
+    "columns": [
+      "status",
+      "source_kind",
+      "source_url",
+      "original_post_url",
+      "article_url",
+      "title",
+      "body"
+    ],
+    "type": "js",
+    "modulePath": "weibo/article.js",
+    "sourceFile": "weibo/article.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "weibo",
     "name": "comments",
     "description": "Get comments on a Weibo post",
     "access": "read",

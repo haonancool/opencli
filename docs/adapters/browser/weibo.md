@@ -13,6 +13,7 @@
 | `opencli weibo user-posts` | 按用户列出微博，可选日期范围 |
 | `opencli weibo me` | 我的信息 |
 | `opencli weibo post` | 读取单条微博 |
+| `opencli weibo article` | 读取独立头条文章的正文 |
 | `opencli weibo favorites` | 我的微博收藏列表 |
 | `opencli weibo publish` | 通过网页 UI 直接发布微博，支持最多 9 张图片 |
 | `opencli weibo delete` | 删除登录账号自己的单条微博 |
@@ -92,6 +93,26 @@ end of the listing. Filtered searches scan up to 100 API pages; hitting that
 cap produces an error instead of a partial result. Narrow the date range or
 lower `--limit` in that case. A completed search with no matches reports an
 empty result.
+
+## Headline Articles
+
+```bash
+opencli weibo article 5367739277120223 -f json
+opencli weibo article 'https://weibo.com/ttarticle/p/show?id=2309405367739278819350' -f json
+```
+
+Pass a status ID, a canonical post URL, or a desktop headline article URL.
+Use the resolved desktop URL for a `t.cn` short link. For a status,
+`source_url` identifies the requested post, `original_post_url` identifies
+the original when the request is a retweet, and `article_url` identifies
+the page read. The command checks the requested post's card first and then
+the original's card.
+
+`body` contains the visible article text with paragraph breaks. Ordinary
+posts, including those with expandable long text, return `not_article`
+with an empty body. Use `weibo post` for post text and `weibo comments`
+for comments. A redirect, restricted article, or missing body produces a
+command error.
 
 ## Post Media
 
