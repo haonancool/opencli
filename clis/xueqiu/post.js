@@ -74,6 +74,78 @@ export function classifyStatusDetailResponse(response) {
 }
 
 /**
+ * Parse the JSON assignment delivered with a normal post page. Never execute
+ * page script text or accept the embedded repost as the requested post.
+ */
+export function parseStatusPageScript(script, statusId, userId) {
+    const match = script.match(/^\s*window\.SNOWMAN_STATUS\s*=\s*(\{[\s\S]*\})\s*;\s*(?:window\.SNOWMAN_TARGET\s*=\s*window\.SNOWMAN_STATUS\.user\s*;\s*)?$/);
+    if (!match)
+        return null;
+    try {
+        const post = JSON.parse(match[1]);
+        if (String(post.id) !== statusId
+            || String(post.user_id ?? post.user?.id) !== userId
+            || typeof post.text !== 'string' || !post.text.trim()) {
+            return null;
+        }
+        // Only return public fields consumed by normalizeStatusDetail.
+        return {
+            id: post.id,
+            user_id: post.user_id ?? post.user?.id,
+            text: post.text,
+            description: post.description,
+            created_at: post.created_at,
+            reply_count: post.reply_count,
+            retweet_count: post.retweet_count,
+            fav_count: post.fav_count,
+            user: { screen_name: post.user?.screen_name },
+        };
+    } catch {
+        return null;
+    }
+}
+
+export async function readStatusPage(page, statusId, userId) {
+    return page.evaluate(`
+    (() => {
+      const status = performance.getEntriesByType('navigation')[0]?.responseStatus || 200;
+      if (status < 200 || status >= 300)
+        return { status, contentType: 'text/plain', json: null, textSnippet: '' };
+      const parse = ${parseStatusPageScript.toString()};
+      const statusId = ${JSON.stringify(statusId)};
+      const userId = ${JSON.stringify(userId)};
+      const pathMatches = location.pathname === '/' + userId + '/' + statusId
+        || location.pathname === '/' + userId + '/' + statusId + '/';
+      const article = document.querySelector('.article__bd');
+      if (pathMatches && article) {
+        for (const script of document.scripts) {
+          if (script.src) continue;
+          const post = parse(script.textContent || '', statusId, userId);
+          if (!post) continue;
+          const body = document.createElement('template');
+          body.innerHTML = post.text;
+          const normalize = text => text.replace(/\\s/g, '');
+          if (normalize(article.textContent).includes(normalize(body.content.textContent))) {
+            return { status: 200, contentType: 'application/json', json: post, textSnippet: '' };
+          }
+        }
+      }
+      // Return fixed diagnostic strings, never page HTML or account state.
+      const text = (document.title + ' ' + document.body.innerText).toLowerCase();
+      const challenge = document.querySelector('#renderData')
+        || /captcha|aliyun_waf|eo_bot_ssid|安全验证|访问验证/.test(text);
+      if (challenge)
+        return { status: 200, contentType: 'text/html', json: null, textSnippet: 'challenge' };
+      if (/页面不存在|帖子已删除|status not found/.test(text))
+        return { status: 200, contentType: 'application/json', json: { error_code: '20210', error_description: 'status not found' }, textSnippet: '' };
+      if (/请先登录|登录已过期/.test(text))
+        return { status: 401, contentType: 'text/plain', json: null, textSnippet: '' };
+      return { status: 200, contentType: 'application/json', json: {}, textSnippet: '' };
+    })()
+  `);
+}
+
+/**
  * Normalize one raw status detail payload into the post output row.
  *
  * @param item Raw status object from `statuses/show.json`.
@@ -306,8 +378,15 @@ cli({
         if (commentLimit > COMMENT_LIMIT_MAX) {
             throw new ArgumentError(`xueqiu post supports --comment_limit up to ${COMMENT_LIMIT_MAX}`);
         }
-        await page.goto('https://xueqiu.com');
-        const detailResponse = await fetchXueqiuEnvelope(page, `/statuses/show.json?id=${encodeURIComponent(statusId)}`);
+        const urlMatch = String(args.status).trim().match(XUEQIU_STATUS_URL_PATTERN);
+        let detailResponse;
+        if (urlMatch) {
+            await page.goto(statusUrl(urlMatch[1], statusId));
+            detailResponse = await readStatusPage(page, statusId, urlMatch[1]);
+        } else {
+            await page.goto('https://xueqiu.com');
+            detailResponse = await fetchXueqiuEnvelope(page, `/statuses/show.json?id=${encodeURIComponent(statusId)}`);
+        }
         const classified = classifyStatusDetailResponse(detailResponse);
         throwXueqiuAccessFailure(classified.kind, `Loading xueqiu post ${statusId}`);
         if (classified.kind === 'not-found') {

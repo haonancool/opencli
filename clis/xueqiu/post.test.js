@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { mockWarn } = vi.hoisted(() => ({
     mockWarn: vi.fn(),
@@ -22,6 +23,8 @@ import {
     normalizeCommentItem,
     normalizeStatusDetail,
     parseStatusInput,
+    parseStatusPageScript,
+    readStatusPage,
 } from './post.js';
 
 const command = getRegistry().get('xueqiu/post');
@@ -87,6 +90,57 @@ describe('xueqiu post', () => {
     it('ignores login wording inside a successful post body', () => {
         const post = statusDetail({ text: '访问资料时显示 login required / 请先登录' });
         expect(classifyStatusDetailResponse(envelope(post, { textSnippet: JSON.stringify(post) }))).toMatchObject({ kind: 'ok' });
+    });
+    it('parses only JSON for the requested page and returns public post fields', () => {
+        const post = statusDetail({ private_field: 'fixture-secret' });
+        const script = `window.SNOWMAN_STATUS = ${JSON.stringify(post)};\nwindow.SNOWMAN_TARGET = window.SNOWMAN_STATUS.user;`;
+        const parsed = parseStatusPageScript(script, '99380989', '9089343523');
+        expect(normalizeStatusDetail(parsed)).toMatchObject({ id: '99380989', text: 'hello world' });
+        expect(parsed).not.toHaveProperty('private_field');
+        expect(parsed.user).toEqual({ screen_name: 'alice' });
+        expect(parseStatusPageScript(script, '2', '9089343523')).toBeNull();
+        expect(parseStatusPageScript(script, '99380989', '2')).toBeNull();
+        expect(parseStatusPageScript('window.SNOWMAN_STATUS = (() => alert(1))();', '99380989', '9089343523')).toBeNull();
+        expect(parseStatusPageScript('window.SNOWMAN_STATUS = {broken};', '99380989', '9089343523')).toBeNull();
+        expect(parseStatusPageScript(`window.SNOWMAN_STATUS = ${JSON.stringify(statusDetail({ text: '' }))};`, '99380989', '9089343523')).toBeNull();
+    });
+    it.each([
+        [200, true, 'hello world', 'ok'],
+        [200, false, 'hello world', 'incompatible'],
+        [200, true, 'another post', 'incompatible'],
+        [403, true, 'hello world', 'forbidden'],
+        [429, true, 'hello world', 'rate-limit'],
+        [401, true, 'hello world', 'auth'],
+        [500, true, 'hello world', 'unknown'],
+    ])('checks the actual page reader for HTTP %i and visible body %s/%s', async (status, articlePresent, body, kind) => {
+        const page = {
+            evaluate: script => runInNewContext(script, {
+                location: { pathname: '/9089343523/99380989' },
+                performance: { getEntriesByType: () => [{ responseStatus: status }] },
+                document: {
+                    title: '',
+                    body: { innerText: body },
+                    scripts: [{ src: '', textContent: `window.SNOWMAN_STATUS = ${JSON.stringify(statusDetail())};` }],
+                    querySelector: selector => selector === '.article__bd' && articlePresent ? { textContent: body } : null,
+                    createElement: () => ({ content: {}, set innerHTML(value) { this.content.textContent = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' '); } }),
+                },
+            }),
+        };
+        expect(classifyStatusDetailResponse(await readStatusPage(page, '99380989', '9089343523'))).toMatchObject({ kind });
+    });
+    it('reads a full URL from the normal page without fetching the legacy detail endpoint', async () => {
+        const page = { goto: vi.fn(), evaluate: vi.fn().mockResolvedValueOnce(envelope(statusDetail())) };
+        const rows = await command.func(page, { status: 'https://www.xueqiu.com/u/9089343523/99380989/', comment_limit: 0 });
+        expect(rows).toMatchObject([{ type: 'post', id: '99380989', text: 'hello world' }]);
+        expect(page.goto).toHaveBeenCalledExactlyOnceWith('https://xueqiu.com/9089343523/99380989');
+        expect(page.evaluate).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('window\\.SNOWMAN_STATUS'));
+        expect(page.evaluate.mock.calls[0][0]).not.toContain('fetch(');
+        expect(page.evaluate.mock.calls[0][0]).not.toContain('statuses/show.json');
+    });
+    it('rejects missing page detail before loading comments', async () => {
+        const page = { goto: vi.fn(), evaluate: vi.fn().mockResolvedValueOnce(envelope({})) };
+        await expect(command.func(page, { status: 'https://xueqiu.com/9089343523/99380989' })).rejects.toThrow(CommandExecutionError);
+        expect(page.evaluate).toHaveBeenCalledTimes(1);
     });
     it('normalizes a status detail into a post row using the HTML body', () => {
         expect(normalizeStatusDetail(statusDetail())).toEqual({
