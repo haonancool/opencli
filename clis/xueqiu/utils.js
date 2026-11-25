@@ -178,6 +178,8 @@ export function throwXueqiuAccessFailure(kind, operation) {
         throw new AuthRequiredError('xueqiu.com', message);
     const hint = kind === 'rate-limit'
         ? 'Wait for the rate limit to clear before running the command again.'
+        : kind === 'forbidden'
+        ? 'Xueqiu rejected this request; automatic requests have stopped. Check access in the existing logged-in browser before retrying. HTTP 403 alone does not establish that the login has expired.'
         : 'Open xueqiu.com in Chrome and check whether the requested content is accessible.';
     throw new CommandExecutionError(message, hint);
 }

@@ -47,10 +47,10 @@ opencli xueqiu user 但斌 --limit 5 --comment_limit 3
 # Start from a later timeline page (20 posts per page)
 opencli xueqiu user 但斌 --page 2 --limit 20
 
-# Read one post with its top-level comments and nested replies (status id or URL)
-opencli xueqiu post 99380989
-opencli xueqiu post https://xueqiu.com/9089343523/99380989 --comment_limit 20
-opencli xueqiu post 99380989 --comment_limit 0
+# Read one post (--user is required for both status ids and full URLs)
+opencli xueqiu post 99380989 --user 9089343523
+opencli xueqiu post https://xueqiu.com/9089343523/99380989 --user 9089343523 --comment_limit 20
+opencli xueqiu post 99380989 --user 9089343523 --comment_limit 0
 
 # Upcoming earnings dates
 opencli xueqiu earnings-date SH600519 --next
@@ -85,7 +85,8 @@ opencli xueqiu feed -v
 - `user` accepts a screen name (resolved via user search, exact match preferred), a numeric `user_id`, or a profile URL (`https://xueqiu.com/u/<user_id>`); the first row may be a pinned post, and reposts show the blogger's own comment
 - `user --page N` starts from Xueqiu's 1-based timeline page (20 posts per page) and still collects up to `--limit` items from that page onward
 - `user --comment_limit N` (max 20, default 20) fetches the first N comments per post and embeds them as a `comment_preview` column (`author -> repliee: text | ...`); pass `--comment_limit 0` to skip comments. It costs one extra request per post and stops with a warning if the site starts rejecting comment fetches
-- Full post URLs load the normal detail page and read its JSON `SNOWMAN_STATUS` assignment after checking the post identity and visible article. Numeric status IDs use `statuses/show.json` and may receive HTTP 403. Supply the full URL from the timeline to use the page path.
+- `post` requires `--user <author_user_id>` for both numeric status IDs and full post URLs. It must be numeric and must match the author in a supplied URL. Missing or invalid values fail before navigation. The command always loads the normal detail page and reads its JSON `SNOWMAN_STATUS` assignment after checking the post identity and visible article; it never calls the legacy `statuses/show.json` detail API. Use it only for content the current account can normally view.
+- A detail 403 stops the command before comments; it never retries or switches paths. HTTP 403 alone cannot distinguish a permission restriction, browser risk control, or expired login. Check the site's message in the existing logged-in browser before another attempt; reauthenticate or complete verification only if the site requests it.
 - `post` returns the post first (`type=post`), followed by each top-level comment and its nested replies (`type=comment`). A nested reply's `parent_id` identifies its top-level comment. `reply_to` gives the reply target's name, falling back to the top-level comment's author. On comment rows, `replies` is the nested reply count.
 - `post --comment_limit N` selects up to N top-level comments (default and max 800). Their nested replies load by default and are included in addition to those N rows. Set `--comment_limit 0` to fetch only the post. The site can filter what it exposes, so the returned rows may differ from the post's `replies` count.
 - `user` and `post` wait six seconds before every API read, including timeline pages, post details, top-level comments, and nested reply pages. Run one command at a time when reading a batch to maintain this spacing across commands. The default command timeout is 900 seconds. Use `--timeout` for larger reads. If a nested reply request stops, `post` reports the parent comment and response type in stderr.

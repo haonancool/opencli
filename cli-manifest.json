@@ -47995,7 +47995,7 @@
   {
     "site": "xueqiu",
     "name": "post",
-    "description": "获取单条雪球帖子正文、评论和楼中楼回复",
+    "description": "获取雪球帖子正文、评论和楼中楼回复（需 --user 作者 UID）",
     "access": "read",
     "domain": "xueqiu.com",
     "strategy": "cookie",
@@ -48006,7 +48006,13 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "帖子 status_id 或 URL(https://xueqiu.com/<user_id>/<status_id>)"
+        "help": "帖子 status_id 或完整 URL；必须同时传 --user 作者 UID"
+      },
+      {
+        "name": "user",
+        "type": "str",
+        "required": true,
+        "help": "必填：作者数字 UID；传完整 URL 时也须提供，且须与 URL 中作者一致"
       },
       {
         "name": "comment_limit",

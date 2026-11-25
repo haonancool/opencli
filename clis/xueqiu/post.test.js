@@ -130,16 +130,44 @@ describe('xueqiu post', () => {
     });
     it('reads a full URL from the normal page without fetching the legacy detail endpoint', async () => {
         const page = { goto: vi.fn(), evaluate: vi.fn().mockResolvedValueOnce(envelope(statusDetail())) };
-        const rows = await command.func(page, { status: 'https://www.xueqiu.com/u/9089343523/99380989/', comment_limit: 0 });
+        const rows = await command.func(page, { user: '9089343523', status: 'https://www.xueqiu.com/u/9089343523/99380989/', comment_limit: 0 });
         expect(rows).toMatchObject([{ type: 'post', id: '99380989', text: 'hello world' }]);
         expect(page.goto).toHaveBeenCalledExactlyOnceWith('https://xueqiu.com/9089343523/99380989');
         expect(page.evaluate).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('window\\.SNOWMAN_STATUS'));
         expect(page.evaluate.mock.calls[0][0]).not.toContain('fetch(');
         expect(page.evaluate.mock.calls[0][0]).not.toContain('statuses/show.json');
     });
+    it('reads a numeric status with --user from the normal page without calling the legacy API', async () => {
+        const page = { goto: vi.fn(), evaluate: vi.fn().mockResolvedValue(envelope(statusDetail())) };
+        const rows = await command.func(page, { status: '99380989', user: '9089343523', comment_limit: 0 });
+        expect(rows).toMatchObject([{ type: 'post', id: '99380989', text: 'hello world' }]);
+        expect(page.goto).toHaveBeenCalledExactlyOnceWith('https://xueqiu.com/9089343523/99380989');
+        expect(page.evaluate).toHaveBeenCalledTimes(1);
+        expect(page.evaluate.mock.calls[0][0]).not.toContain('fetch(');
+    });
+    it.each(['99380989', 'https://xueqiu.com/9089343523/99380989'])('requires --user even for %s before navigation', async (status) => {
+        const page = { goto: vi.fn(), evaluate: vi.fn() };
+        await expect(command.func(page, { status })).rejects.toMatchObject({
+            name: 'ArgumentError',
+            message: expect.stringContaining('--user <user_id>'),
+        });
+        expect(page.goto).not.toHaveBeenCalled();
+        expect(page.evaluate).not.toHaveBeenCalled();
+    });
+    it.each([undefined, null, '', 'alice', '1/2', 'https://xueqiu.com/u/9089343523', '1234567890123456'])('rejects invalid --user %j before navigation', async (user) => {
+        const page = { goto: vi.fn(), evaluate: vi.fn() };
+        await expect(command.func(page, { status: '99380989', user, comment_limit: 0 })).rejects.toThrow(ArgumentError);
+        expect(page.goto).not.toHaveBeenCalled();
+        expect(page.evaluate).not.toHaveBeenCalled();
+    });
+    it('rejects --user conflicting with a full URL before navigation', async () => {
+        const page = { goto: vi.fn(), evaluate: vi.fn() };
+        await expect(command.func(page, { status: 'https://xueqiu.com/9089343523/99380989', user: '22' })).rejects.toThrow(ArgumentError);
+        expect(page.goto).not.toHaveBeenCalled();
+    });
     it('rejects missing page detail before loading comments', async () => {
         const page = { goto: vi.fn(), evaluate: vi.fn().mockResolvedValueOnce(envelope({})) };
-        await expect(command.func(page, { status: 'https://xueqiu.com/9089343523/99380989' })).rejects.toThrow(CommandExecutionError);
+        await expect(command.func(page, { user: '9089343523', status: 'https://xueqiu.com/9089343523/99380989' })).rejects.toThrow(CommandExecutionError);
         expect(page.evaluate).toHaveBeenCalledTimes(1);
     });
     it('normalizes a status detail into a post row using the HTML body', () => {
@@ -193,12 +221,13 @@ describe('xueqiu post', () => {
     });
     it('registers the xueqiu post command', () => {
         expect(command).toMatchObject({ site: 'xueqiu', name: 'post' });
+        expect(command.args.find(arg => arg.name === 'user')).toMatchObject({ required: true });
     });
     it('rejects invalid status and comment_limit before navigating', async () => {
         const page = { goto: vi.fn() };
-        await expect(command.func(page, { status: '   ', comment_limit: 5 })).rejects.toThrow(ArgumentError);
-        await expect(command.func(page, { status: '99380989', comment_limit: -1 })).rejects.toThrow(ArgumentError);
-        await expect(command.func(page, { status: '99380989', comment_limit: 801 })).rejects.toThrow(ArgumentError);
+        await expect(command.func(page, { user: '9089343523', status: '   ', comment_limit: 5 })).rejects.toThrow(ArgumentError);
+        await expect(command.func(page, { user: '9089343523', status: '99380989', comment_limit: -1 })).rejects.toThrow(ArgumentError);
+        await expect(command.func(page, { user: '9089343523', status: '99380989', comment_limit: 801 })).rejects.toThrow(ArgumentError);
         expect(page.goto).not.toHaveBeenCalled();
     });
     it('returns the post row and skips comments when comment_limit is zero', async () => {
@@ -206,11 +235,30 @@ describe('xueqiu post', () => {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn().mockResolvedValueOnce(envelope(statusDetail())),
         };
-        const result = await command.func(page, { status: '99380989', comment_limit: 0 });
+        const result = await command.func(page, { user: '9089343523', status: '99380989', comment_limit: 0 });
         expect(result).toHaveLength(1);
         expect(result[0]).toMatchObject({ type: 'post', id: '99380989', text: 'hello world' });
         expect(page.evaluate).toHaveBeenCalledTimes(1);
-        expect(page.evaluate).toHaveBeenCalledWith(expect.stringContaining('statuses/show.json'));
+        expect(page.evaluate).toHaveBeenCalledWith(expect.stringContaining('window\\.SNOWMAN_STATUS'));
+        expect(page.evaluate.mock.calls[0][0]).not.toContain('fetch(');
+    });
+    it.each([
+        ['https://xueqiu.com/9089343523/418596457', '9089343523', 'post page'],
+        ['418596457', '9089343523', 'post page'],
+    ])('stops on a detail HTTP 403 for %s and user %s without retrying or loading comments', async (status, user, source) => {
+        const page = {
+            goto: vi.fn(),
+            // Even a usable-looking body must not override an HTTP refusal.
+            evaluate: vi.fn().mockResolvedValue(envelope(statusDetail({ id: 418596457 }), { status: 403 })),
+        };
+        await expect(command.func(page, { status, user })).rejects.toMatchObject({
+            name: 'CommandExecutionError',
+            message: `Loading xueqiu post 418596457 (${source}): access denied (HTTP 403)`,
+            hint: expect.stringContaining('automatic requests have stopped'),
+        });
+        expect(page.goto).toHaveBeenCalledTimes(1);
+        expect(page.evaluate).toHaveBeenCalledTimes(1);
+        expect(mockWarn).not.toHaveBeenCalled();
     });
     it('returns the post plus paginated comments for a numeric status id', async () => {
         const page = {
@@ -227,7 +275,7 @@ describe('xueqiu post', () => {
                 next_max_id: -1,
             })),
         };
-        const result = await command.func(page, { status: 'https://xueqiu.com/9089343523/99380989', comment_limit: 5 });
+        const result = await command.func(page, { user: '9089343523', status: 'https://xueqiu.com/9089343523/99380989', comment_limit: 5 });
         expect(result.map(row => ({ type: row.type, id: row.id, text: row.text }))).toEqual([
             { type: 'post', id: '99380989', text: 'hello world' },
             { type: 'comment', id: '11', text: 'nice' },
@@ -272,7 +320,7 @@ describe('xueqiu post', () => {
                 .mockResolvedValueOnce(threadPage([firstReply, secondReply], 122))
                 .mockResolvedValueOnce(threadPage([secondReply, thirdReply], '-1')),
         };
-        const rows = await command.func(page, { status: '99380989' });
+        const rows = await command.func(page, { user: '9089343523', status: '99380989' });
         expect(rows.map(({ id, parent_id }) => [id, parent_id])).toEqual([
             ['99380989', null], ['11', null], ['111', '11'], ['12', null], ['121', '12'], ['122', '12'], ['123', '12'],
         ]);
@@ -292,7 +340,7 @@ describe('xueqiu post', () => {
                     commentItem({ id: 12 }),
                 ] })),
         };
-        const rows = await command.func(page, { status: '99380989', comment_limit: 1 });
+        const rows = await command.func(page, { user: '9089343523', status: '99380989', comment_limit: 1 });
         expect(rows.map(row => row.id)).toEqual(['99380989', '11', '111', '112']);
         expect(page.evaluate).toHaveBeenCalledTimes(2);
     });
@@ -311,7 +359,7 @@ describe('xueqiu post', () => {
                 }))
                 .mockResolvedValueOnce(envelope(null, { status: 429 })),
         };
-        const rows = await command.func(page, { status: '99380989' });
+        const rows = await command.func(page, { user: '9089343523', status: '99380989' });
         expect(rows.map(({ id, parent_id }) => [id, parent_id])).toEqual([
             ['99380989', null], ['11', null], ['111', '11'], ['112', '11'], ['12', null], ['121', '12'],
         ]);
@@ -336,7 +384,7 @@ describe('xueqiu post', () => {
                 }))
                 .mockResolvedValueOnce(envelope(null, { contentType: 'text/html', textSnippet })),
         };
-        const rows = await command.func(page, { status: '99380989' });
+        const rows = await command.func(page, { user: '9089343523', status: '99380989' });
         expect(rows.map(row => row.id)).toEqual(['99380989', '11', '111', '12']);
         expect(page.evaluate).toHaveBeenCalledTimes(4);
         expect(mockWarn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(reason));
@@ -352,7 +400,7 @@ describe('xueqiu post', () => {
                 }))
                 .mockResolvedValueOnce(envelope(null, { status: 403 })),
         };
-        const rows = await command.func(page, { status: '99380989' });
+        const rows = await command.func(page, { user: '9089343523', status: '99380989' });
         expect(rows.map(row => row.id)).toEqual(['99380989', '11', '111']);
         expect(page.evaluate).toHaveBeenCalledTimes(3);
         expect(mockWarn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('HTTP 403'));
@@ -362,7 +410,7 @@ describe('xueqiu post', () => {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn().mockResolvedValueOnce(envelope({ error_description: '您访问的页面不存在', error_code: '20210' }, { status: 400 })),
         };
-        const rejection = command.func(page, { status: '1', comment_limit: 5 });
+        const rejection = command.func(page, { user: '9089343523', status: '1', comment_limit: 5 });
         await expect(rejection).rejects.toThrow(EmptyResultError);
         await expect(rejection).rejects.toThrow('1');
     });
@@ -374,7 +422,7 @@ describe('xueqiu post', () => {
                 textSnippet: '<textarea id="renderData">{"_waf_bd8ce2ce37":"token"}</textarea>',
             })),
         };
-        await expect(command.func(page, { status: '99380989', comment_limit: 5 })).rejects.toMatchObject({
+        await expect(command.func(page, { user: '9089343523', status: '99380989', comment_limit: 5 })).rejects.toMatchObject({
             name: 'CommandExecutionError',
             message: expect.stringContaining('browser verification required'),
         });
@@ -387,7 +435,7 @@ describe('xueqiu post', () => {
                 .mockResolvedValueOnce(envelope(statusDetail()))
                 .mockResolvedValueOnce(envelope({ comments: [] }, { status: 429 })),
         };
-        const result = await command.func(page, { status: '99380989', comment_limit: 3 });
+        const result = await command.func(page, { user: '9089343523', status: '99380989', comment_limit: 3 });
         expect(result).toMatchObject([{ type: 'post', id: '99380989' }]);
         expect(page.evaluate).toHaveBeenCalledTimes(2);
         expect(page.evaluate).toHaveBeenNthCalledWith(2, expect.stringContaining('size=3'));
@@ -402,7 +450,7 @@ describe('xueqiu post', () => {
                 .mockResolvedValueOnce(envelope(statusDetail()))
                 .mockResolvedValueOnce(envelope({ success: false, message: 'unexpected backend state' })),
         };
-        const rejection = command.func(page, { status: '99380989', comment_limit: 5 });
+        const rejection = command.func(page, { user: '9089343523', status: '99380989', comment_limit: 5 });
         await expect(rejection).rejects.toThrow(CommandExecutionError);
         await expect(rejection).rejects.toThrow('Unexpected response');
     });

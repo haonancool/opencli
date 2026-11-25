@@ -148,7 +148,7 @@ export async function readStatusPage(page, statusId, userId) {
 /**
  * Normalize one raw status detail payload into the post output row.
  *
- * @param item Raw status object from `statuses/show.json`.
+ * @param item Raw status object from the validated post page.
  * @returns Public post row (`type=post`).
  */
 export function normalizeStatusDetail(item) {
@@ -353,7 +353,7 @@ cli({
     site: 'xueqiu',
     name: 'post',
     access: 'read',
-    description: '获取单条雪球帖子正文、评论和楼中楼回复',
+    description: '获取雪球帖子正文、评论和楼中楼回复（需 --user 作者 UID）',
     domain: 'xueqiu.com',
     strategy: Strategy.COOKIE,
     browser: true,
@@ -363,8 +363,9 @@ cli({
             name: 'status',
             positional: true,
             required: true,
-            help: '帖子 status_id 或 URL(https://xueqiu.com/<user_id>/<status_id>)',
+            help: '帖子 status_id 或完整 URL；必须同时传 --user 作者 UID',
         },
+        { name: 'user', required: true, help: '必填：作者数字 UID；传完整 URL 时也须提供，且须与 URL 中作者一致' },
         { name: 'comment_limit', type: 'int', default: COMMENT_LIMIT_MAX, help: `Top-level comments to return with their replies (max ${COMMENT_LIMIT_MAX}, 0 = post only)` },
         { name: 'timeout', type: 'int', default: 900, help: 'Maximum seconds for the overall command' },
     ],
@@ -379,16 +380,17 @@ cli({
             throw new ArgumentError(`xueqiu post supports --comment_limit up to ${COMMENT_LIMIT_MAX}`);
         }
         const urlMatch = String(args.status).trim().match(XUEQIU_STATUS_URL_PATTERN);
-        let detailResponse;
-        if (urlMatch) {
-            await page.goto(statusUrl(urlMatch[1], statusId));
-            detailResponse = await readStatusPage(page, statusId, urlMatch[1]);
-        } else {
-            await page.goto('https://xueqiu.com');
-            detailResponse = await fetchXueqiuEnvelope(page, `/statuses/show.json?id=${encodeURIComponent(statusId)}`);
+        const pageUserId = String(args.user ?? '').trim();
+        if (!XUEQIU_STATUS_ID_PATTERN.test(pageUserId)) {
+            throw new ArgumentError('xueqiu post requires --user <user_id> (a numeric author user_id)');
         }
+        if (urlMatch && pageUserId !== urlMatch[1]) {
+            throw new ArgumentError('xueqiu post --user must match the author user_id in the post URL');
+        }
+        await page.goto(statusUrl(pageUserId, statusId));
+        const detailResponse = await readStatusPage(page, statusId, pageUserId);
         const classified = classifyStatusDetailResponse(detailResponse);
-        throwXueqiuAccessFailure(classified.kind, `Loading xueqiu post ${statusId}`);
+        throwXueqiuAccessFailure(classified.kind, `Loading xueqiu post ${statusId} (post page)`);
         if (classified.kind === 'not-found') {
             throw new EmptyResultError(`xueqiu/post ${statusId}`, `xueqiu post ${statusId} does not exist`);
         }
